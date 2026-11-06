@@ -1,0 +1,312 @@
+:root {
+  --bg: #1b1410;
+  --wood: #3a2616;
+  --wood-light: #6b4a2b;
+  --wood-dark: #1f130a;
+  --paper: #e9dcc0;
+  --moss: #5fb04a;
+  --glow: #9fe8c8;
+  --danger: #c4524a;
+  font-family: 'Silkscreen', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--paper);
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100%;
+}
+
+#stage-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+#stage {
+  position: relative;
+  box-shadow: 0 0 0 4px var(--wood-light), 0 0 0 8px var(--wood-dark);
+  line-height: 0;
+}
+
+#stage canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+#popups {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.popup {
+  position: absolute;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1;
+  color: #fff6c8;
+  text-shadow: 2px 2px 0 #1f130a, -1px -1px 0 #1f130a, 1px -1px 0 #1f130a, -1px 1px 0 #1f130a;
+  transform: translate(-50%, -50%);
+  animation: float-up 0.9s steps(12) forwards;
+  white-space: nowrap;
+}
+
+@keyframes float-up {
+  from { opacity: 1; margin-top: 0; }
+  to { opacity: 0; margin-top: -48px; }
+}
+
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 8px 14px;
+  background: var(--wood);
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px var(--wood-light);
+  transition: opacity 0.4s steps(4);
+}
+
+#toast[hidden] { display: block; opacity: 0; pointer-events: none; }
+
+#panel {
+  width: 384px;
+  flex: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--wood);
+  box-shadow: inset 4px 0 0 var(--wood-dark), inset 8px 0 0 var(--wood-light);
+}
+
+/* Feste Kopfleiste: bleibt beim Scrollen sichtbar. */
+#panel .top {
+  flex: none;
+  padding: 10px 14px 12px 22px;
+  background: var(--wood);
+  border-bottom: 4px solid var(--wood-dark);
+}
+
+#panel .scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 14px 18px 22px;
+}
+
+#panel h1 {
+  margin: 0 0 8px;
+  font-family: 'Silkscreen', monospace;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: var(--glow);
+  text-shadow: 3px 3px 0 var(--wood-dark);
+}
+
+#panel h2 {
+  margin: 18px 0 8px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--moss);
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--wood-dark);
+  box-shadow: inset 0 0 0 2px #0f0903;
+}
+
+.stats .stock { display: flex; flex-direction: column; min-width: 0; }
+.stats .big { font-size: 29px; font-weight: 400; color: #fff6c8; line-height: 1.05; }
+.stats .label { font-size: 10px; color: #b8a47e; text-transform: uppercase; letter-spacing: 2px; }
+.stats .rates { display: flex; flex-direction: column; align-items: flex-end; color: var(--glow); }
+.stats .rate { font-size: 13px; }
+.stats .rate.main { font-size: 19px; font-weight: 400; line-height: 1.1; color: #9fe8c8; }
+
+.hint { margin: 10px 0 0; font-size: 11px; line-height: 1.5; color: #8d7a58; }
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: #4d321d;
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px var(--wood-light);
+}
+
+.item:hover:not(:disabled) { background: #5e3d24; }
+.item:active:not(:disabled) { transform: translateY(2px); }
+.item:disabled { opacity: 0.55; cursor: not-allowed; }
+.item .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.item .name { font-size: 15px; font-weight: 400; }
+.item .count { font-size: 19px; font-weight: 400; color: var(--glow); }
+.item .sub { font-size: 12px; color: #d9c79d; }
+.item .desc { font-size: 11px; line-height: 1.45; color: #a8946c; }
+.item.upgrade { background: #2f4a2a; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #4f7a43; }
+.item.upgrade:hover:not(:disabled) { background: #3a5c33; }
+
+footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+footer button {
+  padding: 14px 8px;
+  background: var(--wood-dark);
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--wood-light);
+  font-size: 12px;
+}
+
+footer button:hover { background: #2c1b0f; }
+footer .danger { box-shadow: inset 0 0 0 2px var(--danger); }
+
+@media (max-width: 860px) {
+  #app { flex-direction: column; }
+  #panel { width: 100%; height: 45%; box-shadow: inset 0 4px 0 var(--wood-dark), inset 0 8px 0 var(--wood-light); }
+  #panel .top, #panel .scroll { padding-left: 14px; padding-right: 14px; }
+  #panel .top { padding-top: 16px; }
+  #stage-wrap { padding: 8px; }
+}
+
+/* --- Knoten-Werkzeuge und Tooltip --- */
+.hint.small { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: #8d7a58; }
+
+.item.tool { background: #3f3a22; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #7a7040; }
+.item.tool:hover { background: #4d472a; }
+.item.tool.poor .sub { color: #d98a7a; }
+.item.tool.selected {
+  background: #55502d;
+  box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px var(--glow);
+}
+
+#tooltip {
+  position: absolute;
+  z-index: 5;
+  min-width: 150px;
+  max-width: 210px;
+  padding: 9px 13px 10px;
+  line-height: 1.45;
+  background: var(--wood-dark);
+  color: var(--paper);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--wood-light);
+}
+
+#tooltip[hidden] { display: none; }
+.tt-title { font-size: 14px; font-weight: 400; color: #fff6c8; margin-bottom: 2px; }
+.tt-line { font-size: 12px; }
+.tt-dim { color: #a8946c; }
+.tt-good { color: var(--glow); }
+.tt-bad { color: #ff9d8f; }
+
+/* --- Tabs --- */
+.tabs {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 12px 14px 0 22px;
+  background: var(--wood);
+}
+
+.tab {
+  position: relative;
+  padding: 12px 2px 11px;
+  font-size: 12px;
+  text-align: center;
+  background: var(--wood-dark);
+  border: 0;
+  color: #b8a47e;
+  box-shadow: inset 0 0 0 2px var(--wood-light);
+}
+
+.tab:hover { color: var(--paper); }
+.tab.active {
+  background: #4d321d;
+  color: #fff6c8;
+  font-weight: 400;
+  box-shadow: inset 0 0 0 2px var(--glow);
+}
+
+.badge {
+  position: absolute;
+  top: -9px;
+  right: -5px;
+  min-width: 22px;
+  padding: 3px 5px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #1b1410;
+  background: var(--glow);
+  box-shadow: 0 0 0 2px var(--wood-dark);
+}
+
+.badge[hidden] { display: none; }
+[data-pane][hidden] { display: none; }
+#panel .scroll { padding-top: 6px; }
+#panel .top { border-bottom: 0; padding-bottom: 6px; }
+.tabs + .scroll { border-top: 4px solid var(--wood-dark); margin-top: 8px; }
+.hint:first-child { margin-top: 4px; }
+footer { margin-top: 4px; }
+@media (max-width: 860px) { .tabs { padding-left: 14px; padding-right: 14px; } }
+
+/* Abzeichen bleibt immer sichtbar; bei 0 gedämpft. */
+.badge.zero { color: #b8a47e; background: var(--wood-dark); box-shadow: 0 0 0 2px var(--wood-light); }
+.badge { text-align: center; }
+
+/* --- Trüffel: Buff-Chips und Schwein --- */
+.buffs { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.buffs:empty { display: none; }
+
+.buff {
+  --fill: 100%;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: #fff6c8;
+  background: linear-gradient(90deg, #6a4a14 var(--fill), #2a1c0a var(--fill));
+  box-shadow: inset 0 0 0 2px #d9a441;
+}
+
+.buff.click { background: linear-gradient(90deg, #5a2f6a var(--fill), #20112a var(--fill)); box-shadow: inset 0 0 0 2px #c07ad9; }
+.subhead { margin: 22px 0 8px; }
+.item.pig { background: #4d3322; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #c98a7a; }
+.item.pig:hover:not(:disabled) { background: #5e3f2b; }

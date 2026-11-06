@@ -1,0 +1,4 @@
+# Lokale Dev-Konfiguration (enthält Pfade dieses Rechners)
+.claude/
+
+.DS_Store

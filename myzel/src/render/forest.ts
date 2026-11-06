@@ -70,6 +70,11 @@ export class Forest {
   private flies: Array<{ s: Sprite; x: number; y: number; phase: number; speed: number }> = []
   private random = rng(909)
   private time = 0
+  private leafLayer = new Container()
+  private leaves: Array<{ s: Sprite; vx: number; vy: number; phase: number; landY: number; fade: number }> = []
+  private autumn = 0
+  private burstTime = 0
+  private leafAccum = 0
 
   constructor(side: number, skyExtra: number) {
     const left = -side - MARGIN
@@ -183,6 +188,8 @@ export class Forest {
       frontLayer.addChild(sprite)
     }
 
+    this.front.addChild(this.leafLayer)
+
     // Glühwürmchen
     for (let i = 0; i < 18; i++) {
       const s = new Sprite(Texture.WHITE)
@@ -201,9 +208,66 @@ export class Forest {
     }
   }
 
+  /** Herbst-Fortschritt 0 bis 1; ab etwa 0.3 fallen vereinzelt Blätter. */
+  setAutumn(progress: number): void {
+    this.autumn = Math.max(0, Math.min(1, progress))
+  }
+
+  /** Kurzer, dichter Blätterregen. */
+  leafBurst(): void {
+    this.burstTime = 5
+  }
+
+  private spawnLeaf(burst: boolean): void {
+    if (this.leaves.length >= 240) return
+    const s = new Sprite(Texture.WHITE)
+    s.tint = [0xe08a2f, 0xf2c14e, 0xb8561f, 0xd9602a, 0xc9a23a][Math.floor(this.random() * 5)]
+    s.width = this.random() < 0.5 ? 3 : 2
+    s.height = 2
+    s.position.set(-60 + this.random() * (WORLD_W + 120), (burst ? -120 : -40) + this.random() * (burst ? 80 : 50))
+    this.leafLayer.addChild(s)
+    this.leaves.push({
+      s,
+      vx: (this.random() - 0.5) * 8,
+      vy: 14 + this.random() * 14,
+      phase: this.random() * 6,
+      landY: SURFACE_Y + 3 + this.random() * 4,
+      fade: 1.2,
+    })
+  }
+
+  private updateLeaves(dt: number): void {
+    const ambient = this.autumn > 0.3 ? Math.pow((this.autumn - 0.3) / 0.7, 2) * 3 : 0
+    this.burstTime = Math.max(0, this.burstTime - dt)
+    this.leafAccum += dt * (ambient + (this.burstTime > 0 ? 45 : 0))
+    while (this.leafAccum >= 1) {
+      this.leafAccum -= 1
+      this.spawnLeaf(this.burstTime > 0)
+    }
+    for (let i = this.leaves.length - 1; i >= 0; i--) {
+      const leaf = this.leaves[i]
+      if (leaf.s.y < leaf.landY) {
+        leaf.s.x += (leaf.vx + Math.sin(this.time * 1.6 + leaf.phase) * 12) * dt
+        leaf.s.y += leaf.vy * dt
+      } else {
+        // Liegt auf dem Boden und verblasst langsam.
+        leaf.fade -= dt
+        leaf.s.alpha = Math.max(0, leaf.fade / 1.2)
+        if (leaf.fade <= 0) {
+          leaf.s.destroy()
+          this.leaves.splice(i, 1)
+          continue
+        }
+      }
+      leaf.s.position.set(Math.round(leaf.s.x), Math.round(leaf.s.y))
+    }
+  }
+
   update(dtMs: number, light: number): void {
     const dt = dtMs / 1000
     this.time += dt
+    this.updateLeaves(dt)
+    this.leafLayer.tint = lerpColor(0x3a4468, 0xffffff, light)
 
     for (const layer of this.layers) {
       layer.container.tint = lerpColor(layer.night, 0xffffff, light)

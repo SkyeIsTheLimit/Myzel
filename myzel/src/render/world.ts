@@ -17,6 +17,7 @@ import {
   buildMushroomTexture,
   buildSoilTextures,
   buildSunTexture,
+  AUTUMN_TREE,
   buildTreeTexture,
   makeCanvas,
   rng,
@@ -84,6 +85,8 @@ export class World {
   private logBounce = 0
   private mushrooms: Sprite[] = []
   private forest = new Forest(SIDE, SKY_EXTRA)
+  /** Herbst-Gegenstücke der Bäume; werden je nach Fortschritt eingeblendet. */
+  private autumnTrees: Array<{ sprite: Sprite; start: number }> = []
 
   private points: HyphaPoint[]
   private revealed = 0
@@ -190,6 +193,8 @@ export class World {
     // Bäume, Totholz, Pilze
     // Baumreihe über die ganze Breite: die drei Spielbäume plus Deko-Bäume im gleichen Abstand.
     const treeTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5))
+    const autumnTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, AUTUMN_TREE))
+    const autumnRandom = rng(777)
     const spacing = TREE_X[1] - TREE_X[0]
     const extra = Math.ceil(SIDE / spacing)
     for (let k = -extra; k < TREE_X.length + extra; k++) {
@@ -198,6 +203,14 @@ export class World {
       tree.x = TREE_X[0] + k * spacing
       tree.y = SURFACE_Y + 4
       this.stage.addChild(tree)
+
+      const autumn = new Sprite(autumnTextures[((k % 3) + 3) % 3])
+      autumn.anchor.set(0.5, 1)
+      autumn.position.copyFrom(tree.position)
+      autumn.alpha = 0
+      this.stage.addChild(autumn)
+      // Nicht alle Bäume färben sich gleichzeitig.
+      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55 })
     }
 
     this.log = new Sprite(buildLogTexture())
@@ -254,6 +267,17 @@ export class World {
   /** Zentriert das Spielfeld im sichtbaren Bereich; der Rest zeigt Himmel, Wald und tiefen Boden. */
   setViewport(width: number, height: number): void {
     this.stage.position.set(Math.floor((width - WORLD_W) / 2), Math.floor((height - WORLD_H) / 2))
+  }
+
+  /** Herbst-Fortschritt 0 bis 1: Bäume färben sich um, Blätter fallen. */
+  setAutumn(progress: number): void {
+    for (const t of this.autumnTrees) t.sprite.alpha = Math.max(0, Math.min(1, (progress - t.start) / 0.45))
+    this.forest.setAutumn(progress)
+  }
+
+  /** Blätterregen beim Einläuten des Herbstes. */
+  leafBurst(): void {
+    this.forest.leafBurst()
   }
 
   /** Springt zu einer Tageszeit in [0, 1): 0 Sonnenaufgang, 0.25 Mittag, 0.5 Sonnenuntergang, 0.75 Mitternacht. */

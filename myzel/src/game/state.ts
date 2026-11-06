@@ -5,7 +5,9 @@ import {
   CELLS,
   REFUND_RATE,
   canPlaceAt,
+  INITIAL_CLAIMED,
   claimCostValue,
+  claimStartCells,
   gridProduction,
   isClaimable,
   isTreeCell,
@@ -15,17 +17,33 @@ import {
   placementGain,
 } from './grid.ts'
 import type { Grid } from './grid.ts'
-import { BUFFS, MAX_PIGS, getBuffDef, pigCost, rollReward } from './truffle.ts'
+import { BUFFS, MAX_PIGS, TRUFFLE_LIFETIME, getBuffDef, pigCost, rollReward, spawnRateMultiplier } from './truffle.ts'
+import {
+  HUMUS_UPGRADES,
+  buildingCostFactor,
+  getHumusUpgrade,
+  humusGain,
+  humusMultiplier,
+  offlineHours,
+  startCells,
+  startNutrients,
+  truffleLifetimeBonus,
+  truffleRateBonus,
+} from './prestige.ts'
 import type { BuffType } from './truffle.ts'
 import { formatNumber } from './format.ts'
 
 export const TICK_RATE = 10
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
+/** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
 export const MAX_OFFLINE_SECONDS = 8 * 3600
 
 export interface GameState {
   nutrients: Decimal
+  /** Im aktuellen Durchgang gesammelt (wird beim Herbst zurückgesetzt). */
   totalNutrients: Decimal
+  /** Über alle Durchgänge gesammelt. */
+  lifetimeNutrients: Decimal
   buildings: Record<string, number>
   upgrades: string[]
   clicks: number
@@ -33,6 +51,13 @@ export interface GameState {
   pigs: number
   trufflesFound: number
   buffs: ActiveBuff[]
+  /** Ausgebbarer Humus. */
+  humus: number
+  /** Insgesamt verdienter Humus; bestimmt den dauerhaften Produktionsbonus. */
+  totalHumus: number
+  humusLevels: Record<string, number>
+  /** Wie oft der Herbst schon eingeläutet wurde. */
+  autumns: number
   /** Unix-Zeit (ms) des letzten Speicherns, für den Offline-Fortschritt. */
   lastSaved: number
 }
@@ -56,6 +81,12 @@ export interface SaveData {
   pigs?: number
   trufflesFound?: number
   buffs?: ActiveBuff[]
+  /** Ab Version 4. */
+  lifetimeNutrients?: string
+  humus?: number
+  totalHumus?: number
+  humusLevels?: Record<string, number>
+  autumns?: number
   lastSaved: number
 }
 
@@ -65,6 +96,7 @@ export function newState(now = Date.now()): GameState {
   return {
     nutrients: new Decimal(0),
     totalNutrients: new Decimal(0),
+    lifetimeNutrients: new Decimal(0),
     buildings,
     upgrades: [],
     clicks: 0,
@@ -72,8 +104,39 @@ export function newState(now = Date.now()): GameState {
     pigs: 0,
     trufflesFound: 0,
     buffs: [],
+    humus: 0,
+    totalHumus: 0,
+    humusLevels: {},
+    autumns: 0,
     lastSaved: now,
   }
+}
+
+export function humusLevel(state: GameState, id: string): number {
+  return state.humusLevels[id] ?? 0
+}
+
+export function humusMult(state: GameState): number {
+  return humusMultiplier(state.totalHumus)
+}
+
+/** Maximale Offline-Zeit in Sekunden (Grundwert plus „Langer Schlaf“). */
+export function offlineCap(state: GameState): number {
+  return offlineHours(humusLevel(state, 'sleep')) * 3600
+}
+
+/** Multiplikator auf die Trüffel-Fundrate aus Humus-Verbesserungen. */
+export function truffleBonus(state: GameState): number {
+  return truffleRateBonus(humusLevel(state, 'sniff'))
+}
+
+/** Gesamte Fundrate: Schweine mal Humus-Bonus. */
+export function truffleRate(state: GameState): number {
+  return spawnRateMultiplier(state.pigs) * truffleBonus(state)
+}
+
+export function truffleLifetime(state: GameState): number {
+  return TRUFFLE_LIFETIME + truffleLifetimeBonus(humusLevel(state, 'scent'))
 }
 
 export function buildingCost(def: BuildingDef, owned: number): Decimal {
@@ -117,14 +180,14 @@ export function buffMult(state: GameState, type: BuffType): number {
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
   let sum = new Decimal(gridProduction(state.grid))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state))
+  sum = sum.mul(globalMult(state)).mul(humusMult(state))
   return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
 }
 
 export function clickValue(state: GameState): Decimal {
   const mult = upgradeMult(state, (u) => u.effect.type === 'click')
   // Klicken skaliert leicht mit der Produktion, damit es auch später relevant bleibt.
-  return new Decimal(1).mul(mult).add(productionPerSecond(state).mul(0.01)).mul(buffMult(state, 'click'))
+  return new Decimal(1).mul(mult).mul(humusMult(state)).add(productionPerSecond(state).mul(0.01)).mul(buffMult(state, 'click'))
 }
 
 export function totalBuildings(state: GameState): number {
@@ -136,17 +199,22 @@ export function growthScore(state: GameState): number {
   return totalBuildings(state) + 3 * state.grid.nodes.filter(Boolean).length
 }
 
+/** Felder, die ohne Kosten zählen: Startfelder plus Humus-Bonus „Weites Geflecht“. */
+function freeCells(state: GameState): number {
+  return INITIAL_CLAIMED + startCells(humusLevel(state, 'web'))
+}
+
 export function claimCost(state: GameState, i: number): Decimal {
-  return new Decimal(claimCostValue(state.grid, i))
+  return new Decimal(claimCostValue(state.grid, i, freeCells(state)))
 }
 
 export function canClaim(state: GameState, i: number): boolean {
-  return isClaimable(state.grid, i) && state.nutrients.gte(claimCostValue(state.grid, i))
+  return isClaimable(state.grid, i) && state.nutrients.gte(claimCost(state, i))
 }
 
 export function claimCell(state: GameState, i: number): boolean {
   if (!canClaim(state, i)) return false
-  state.nutrients = state.nutrients.sub(claimCostValue(state.grid, i))
+  state.nutrients = state.nutrients.sub(claimCost(state, i))
   state.grid.claimed[i] = true
   return true
 }
@@ -185,15 +253,19 @@ export function placementGainPerSecond(state: GameState, i: number, id: string):
   return new Decimal(placementGain(state.grid, i, id)).mul(globalMult(state))
 }
 
+/** Preis des nächsten Gebäudes inklusive Humus-Rabatt „Sparsame Hyphen“. */
+export function buildingCostFor(state: GameState, def: BuildingDef): Decimal {
+  return Decimal.floor(buildingCost(def, state.buildings[def.id] ?? 0).mul(buildingCostFactor(humusLevel(state, 'cheap'))))
+}
+
 export function canBuyBuilding(state: GameState, id: string): boolean {
-  const def = getBuilding(id)
-  return state.nutrients.gte(buildingCost(def, state.buildings[id] ?? 0))
+  return state.nutrients.gte(buildingCostFor(state, getBuilding(id)))
 }
 
 export function buyBuilding(state: GameState, id: string): boolean {
   const def = getBuilding(id)
   const owned = state.buildings[id] ?? 0
-  const cost = buildingCost(def, owned)
+  const cost = buildingCostFor(state, def)
   if (state.nutrients.lt(cost)) return false
   state.nutrients = state.nutrients.sub(cost)
   state.buildings[id] = owned + 1
@@ -219,6 +291,7 @@ export function buyUpgrade(state: GameState, id: string): boolean {
 export function addNutrients(state: GameState, amount: Decimal): void {
   state.nutrients = state.nutrients.add(amount)
   state.totalNutrients = state.totalNutrients.add(amount)
+  state.lifetimeNutrients = state.lifetimeNutrients.add(amount)
 }
 
 export function click(state: GameState): Decimal {
@@ -288,9 +361,54 @@ export function collectTruffle(state: GameState, rand: number): TruffleResult {
   }
 }
 
+/** Humus, den ein Herbst jetzt bringen würde. */
+export function prestigeGain(state: GameState): number {
+  return humusGain(state.totalNutrients)
+}
+
+export function canPrestige(state: GameState): boolean {
+  return prestigeGain(state) >= 1
+}
+
+/**
+ * Läutet den Herbst ein: Humus gutschreiben, Durchgang zurücksetzen. Bleiben: Humus samt Verbesserungen,
+ * Trüffelschweine, Fundzähler, Klickzähler. Gibt den erhaltenen Humus zurück (0 = noch nicht möglich).
+ */
+export function prestige(state: GameState): number {
+  const gain = prestigeGain(state)
+  if (gain < 1) return 0
+  state.humus += gain
+  state.totalHumus += gain
+  state.autumns += 1
+  state.nutrients = new Decimal(startNutrients(humusLevel(state, 'seed')))
+  state.totalNutrients = new Decimal(0)
+  for (const b of BUILDINGS) state.buildings[b.id] = 0
+  state.upgrades = []
+  state.buffs = []
+  state.grid = newGrid()
+  claimStartCells(state.grid, startCells(humusLevel(state, 'web')))
+  return gain
+}
+
+export function canBuyHumusUpgrade(state: GameState, id: string): boolean {
+  const def = getHumusUpgrade(id)
+  if (!def) return false
+  const level = humusLevel(state, id)
+  return level < def.costs.length && state.humus >= def.costs[level]
+}
+
+export function buyHumusUpgrade(state: GameState, id: string): boolean {
+  if (!canBuyHumusUpgrade(state, id)) return false
+  const def = getHumusUpgrade(id)!
+  const level = humusLevel(state, id)
+  state.humus -= def.costs[level]
+  state.humusLevels[id] = level + 1
+  return true
+}
+
 /** Rechnet die Abwesenheit nach; gibt die verdienten Nährstoffe und die angerechneten Sekunden zurück. */
 export function applyOffline(state: GameState, now = Date.now()): { gained: Decimal; seconds: number } {
-  const seconds = Math.min(MAX_OFFLINE_SECONDS, Math.max(0, (now - state.lastSaved) / 1000))
+  const seconds = Math.min(offlineCap(state), Math.max(0, (now - state.lastSaved) / 1000))
   const before = state.nutrients
   tick(state, seconds)
   state.lastSaved = now
@@ -302,6 +420,7 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     version: SAVE_VERSION,
     nutrients: state.nutrients.toString(),
     totalNutrients: state.totalNutrients.toString(),
+    lifetimeNutrients: state.lifetimeNutrients.toString(),
     buildings: { ...state.buildings },
     upgrades: [...state.upgrades],
     clicks: state.clicks,
@@ -312,6 +431,10 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     pigs: state.pigs,
     trufflesFound: state.trufflesFound,
     buffs: state.buffs.map((b) => ({ id: b.id, remaining: b.remaining })),
+    humus: state.humus,
+    totalHumus: state.totalHumus,
+    humusLevels: { ...state.humusLevels },
+    autumns: state.autumns,
     lastSaved: now,
   }
 }
@@ -333,7 +456,7 @@ export function deserialize(data: unknown): GameState | null {
   if (typeof data !== 'object' || data === null) return null
   const d = data as Partial<SaveData>
   // Version 1 hatte noch kein Gitter; es wird dann mit den Startfeldern angelegt.
-  if (d.version !== 1 && d.version !== 2 && d.version !== SAVE_VERSION) return null
+  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== SAVE_VERSION) return null
   if (typeof d.nutrients !== 'string' || typeof d.totalNutrients !== 'string') return null
   const state = newState(typeof d.lastSaved === 'number' ? d.lastSaved : Date.now())
   state.nutrients = new Decimal(d.nutrients)
@@ -350,5 +473,15 @@ export function deserialize(data: unknown): GameState | null {
   state.buffs = Array.isArray(d.buffs)
     ? d.buffs.filter((b) => typeof b?.remaining === 'number' && b.remaining > 0 && getBuffDef(b.id)).map((b) => ({ id: b.id, remaining: b.remaining }))
     : []
+  // Ältere Spielstände kannten nur „insgesamt“; es dient als bester Wert für beide Zähler.
+  state.lifetimeNutrients = typeof d.lifetimeNutrients === 'string' ? new Decimal(d.lifetimeNutrients) : state.totalNutrients
+  const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0)
+  state.humus = count(d.humus)
+  state.totalHumus = Math.max(count(d.totalHumus), state.humus)
+  state.autumns = count(d.autumns)
+  for (const def of HUMUS_UPGRADES) {
+    const level = count(d.humusLevels?.[def.id])
+    if (level > 0) state.humusLevels[def.id] = Math.min(level, def.costs.length)
+  }
   return state
 }

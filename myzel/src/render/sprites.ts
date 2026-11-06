@@ -117,7 +117,17 @@ function filledCircle(mask: boolean[][], cx: number, cy: number, radius: number)
   }
 }
 
-export function buildTreeTexture(seed: number): Texture {
+export interface TreePalette {
+  light: string
+  mid: string
+  dark: string
+  edge: string
+}
+
+export const GREEN_TREE: TreePalette = { light: '#5fb054', mid: '#3f8f3a', dark: '#2d6a2e', edge: '#234f27' }
+export const AUTUMN_TREE: TreePalette = { light: '#f2c14e', mid: '#e08a2f', dark: '#b8561f', edge: '#7a3a14' }
+
+export function buildTreeTexture(seed: number, palette: TreePalette = GREEN_TREE): Texture {
   const w = 48
   const h = 76
   const { canvas, ctx } = makeCanvas(w, h)
@@ -147,10 +157,10 @@ export function buildTreeTexture(seed: number): Texture {
       if (!mask[y][x]) continue
       const edge = !mask[y - 1]?.[x] || !mask[y + 1]?.[x] || !mask[y]?.[x - 1] || !mask[y]?.[x + 1]
       const v = (x / w) * 0.4 + (y / 44) * 0.6 + (r() - 0.5) * 0.4
-      let color = '#3f8f3a'
-      if (v < 0.28) color = '#5fb054'
-      else if (v > 0.68) color = '#2d6a2e'
-      if (edge) color = '#234f27'
+      let color = palette.mid
+      if (v < 0.28) color = palette.light
+      else if (v > 0.68) color = palette.dark
+      if (edge) color = palette.edge
       px(ctx, x, y, color)
     }
   }

@@ -5,7 +5,6 @@ import { Application } from 'pixi.js'
 import { NODES } from './game/data.ts'
 import { isTreeCell } from './game/grid.ts'
 import {
-  MAX_OFFLINE_SECONDS,
   TICK_RATE,
   applyOffline,
   buyBuilding,
@@ -14,14 +13,21 @@ import {
   canPlace,
   claimCell,
   click,
+  buyHumusUpgrade,
   buyPig,
   collectTruffle,
   growthScore,
   newState,
+  offlineCap,
   placeNode,
+  prestige as startAutumn,
+  prestigeGain,
   removeNode,
   tick,
+  truffleBonus,
+  truffleLifetime,
 } from './game/state.ts'
+import { HUMUS_BONUS, autumnProgress } from './game/prestige.ts'
 import type { GameState } from './game/state.ts'
 import { TRUFFLE_FIRST_MAX, TRUFFLE_FIRST_MIN, nextSpawnDelay } from './game/truffle.ts'
 import { deleteSave, exportSave, importSave, loadGame, saveGame } from './game/save.ts'
@@ -121,6 +127,8 @@ async function main(): Promise<void> {
   const refreshWorld = (): void => {
     world.setGrowth(growthScore(state))
     world.truffles.setPigs(state.pigs)
+    world.truffles.lifetime = truffleLifetime(state)
+    world.setAutumn(autumnProgress(state.totalNutrients))
   }
 
   // Trüffel: zufällige Funde, Schweine verkürzen die Wartezeit.
@@ -205,6 +213,23 @@ async function main(): Promise<void> {
     buyBuilding: (id) => { if (buyBuilding(state, id)) refreshWorld() },
     buyUpgrade: (id) => { buyUpgrade(state, id) },
     buyPig: () => { if (buyPig(state)) refreshWorld() },
+    buyHumus: (id) => { if (buyHumusUpgrade(state, id)) refreshAll() },
+    prestige: () => {
+      const gain = prestigeGain(state)
+      if (gain < 1) return
+      const bonus = Math.round(gain * HUMUS_BONUS * 100)
+      const ok = window.confirm(
+        `Herbst einläuten?\n\nDu erhältst ${gain} Humus (+${bonus} % Produktion dauerhaft).\n` +
+          'Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt.\nHumus, Schweine und Fundzähler bleiben.',
+      )
+      if (!ok) return
+      startAutumn(state)
+      tool = null
+      world.leafBurst()
+      refreshAll()
+      saveGame(state)
+      showToast(`Der Herbst ist da! +${gain} Humus`, 6000)
+    },
     save: () => { saveGame(state); showToast('Gespeichert.', 1500) },
     exportSave: async () => {
       const text = exportSave(state)
@@ -249,7 +274,7 @@ async function main(): Promise<void> {
     const dt = dtMs / 1000
     if (dt > 1) {
       // Tab war im Hintergrund: wie Offline-Zeit behandeln.
-      tick(state, Math.min(dt, MAX_OFFLINE_SECONDS))
+      tick(state, Math.min(dt, offlineCap(state)))
     } else {
       accumulator += dt
       while (accumulator >= step) {
@@ -264,12 +289,13 @@ async function main(): Promise<void> {
     truffleTimer -= Math.min(dt, 1)
     if (truffleTimer <= 0) {
       world.truffles.spawn()
-      truffleTimer = nextSpawnDelay(Math.random(), state.pigs)
+      truffleTimer = nextSpawnDelay(Math.random(), state.pigs, truffleBonus(state))
     }
 
     sinceUi += dtMs
     if (sinceUi >= UI_REFRESH_MS) {
       sinceUi = 0
+      world.setAutumn(autumnProgress(state.totalNutrients))
       panel.update(state, tool)
       updateHover()
     }

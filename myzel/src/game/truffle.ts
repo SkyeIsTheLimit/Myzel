@@ -55,9 +55,9 @@ export function spawnRateMultiplier(pigs: number): number {
   return 1 + PIG_RATE_BONUS * pigs
 }
 
-/** Wartezeit bis zum nächsten Trüffel; `rand` in [0, 1). */
-export function nextSpawnDelay(rand: number, pigs: number): number {
-  return (TRUFFLE_MIN_DELAY + rand * (TRUFFLE_MAX_DELAY - TRUFFLE_MIN_DELAY)) / spawnRateMultiplier(pigs)
+/** Wartezeit bis zum nächsten Trüffel; `rand` in [0, 1), `bonus` z. B. aus Humus-Verbesserungen. */
+export function nextSpawnDelay(rand: number, pigs: number, bonus = 1): number {
+  return (TRUFFLE_MIN_DELAY + rand * (TRUFFLE_MAX_DELAY - TRUFFLE_MIN_DELAY)) / (spawnRateMultiplier(pigs) * bonus)
 }
 
 /** Wählt eine Belohnung nach Gewicht; `rand` in [0, 1). */

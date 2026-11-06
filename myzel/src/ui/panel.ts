@@ -1,18 +1,25 @@
 import { BUILDINGS, NODES, UPGRADES } from '../game/data.ts'
 import { nodeCountOf } from '../game/grid.ts'
-import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost, spawnRateMultiplier } from '../game/truffle.ts'
+import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
+import { HUMUS_BONUS, HUMUS_DIVISOR, HUMUS_UPGRADES } from '../game/prestige.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
 import type { Tool } from './tooltip.ts'
 import { formatNumber } from '../game/format.ts'
 import {
-  buildingCost,
+  buildingCostFor,
   canBuyBuilding,
+  canBuyHumusUpgrade,
   canBuyPig,
   canBuyUpgrade,
+  canPrestige,
   clickValue,
+  humusLevel,
+  humusMult,
   isUpgradeVisible,
   nodeCost,
+  prestigeGain,
   productionPerSecond,
+  truffleRate,
   unitProduction,
 } from '../game/state.ts'
 import type { GameState } from '../game/state.ts'
@@ -20,6 +27,8 @@ import type { GameState } from '../game/state.ts'
 export interface PanelActions {
   selectTool: (tool: Tool) => void
   buyPig: () => void
+  prestige: () => void
+  buyHumus: (id: string) => void
   buyBuilding: (id: string) => void
   buyUpgrade: (id: string) => void
   save: () => void
@@ -47,6 +56,14 @@ function readStoredTab(): string {
   }
 }
 
+interface HumusRow {
+  id: string
+  button: HTMLButtonElement
+  count: HTMLElement
+  cost: HTMLElement
+  desc: HTMLElement
+}
+
 interface ToolRow {
   id: string
   button: HTMLButtonElement
@@ -68,6 +85,11 @@ export class Panel {
   private pigRate: HTMLElement
   private pigDesc: HTMLElement
   private buffBox: HTMLElement
+  private humusRows: HumusRow[] = []
+  private autumnBadge: HTMLElement
+  private prestigeButton: HTMLButtonElement
+  private autumnHint: HTMLElement
+  private autumnFields: Record<'count' | 'humus' | 'bonus' | 'run' | 'life', HTMLElement>
   private buffKey = ''
   private upgradeEmpty: HTMLElement
   private badge: HTMLElement
@@ -102,6 +124,7 @@ export class Panel {
         <button class="tab" role="tab" data-tab="growth">Wachstum</button>
         <button class="tab" role="tab" data-tab="nodes">Knoten</button>
         <button class="tab" role="tab" data-tab="upgrades">Upgrades<span class="badge zero" data-badge>0</span></button>
+        <button class="tab" role="tab" data-tab="autumn">Herbst<span class="badge leaf" data-a-badge hidden>!</span></button>
         <button class="tab" role="tab" data-tab="system">Menü</button>
       </nav>
       <div class="scroll">
@@ -119,6 +142,19 @@ export class Panel {
         <section data-pane="upgrades" hidden>
           <p class="hint" data-upgrade-empty>Noch keine Verbesserungen verfügbar. Sammle weiter Nährstoffe.</p>
           <div class="list" data-upgrades></div>
+        </section>
+        <section data-pane="autumn" hidden>
+          <div class="autumn-card">
+            <div class="a-row"><span>Herbste</span><span data-a-count>0</span></div>
+            <div class="a-row"><span>Humus</span><span class="humus" data-a-humus>0</span></div>
+            <div class="a-row"><span>Produktionsbonus</span><span data-a-bonus>×1.00</span></div>
+            <div class="a-row dim"><span>Gesammelt (Durchgang)</span><span data-a-run>0</span></div>
+            <div class="a-row dim"><span>Gesammelt (gesamt)</span><span data-a-life>0</span></div>
+          </div>
+          <button class="prestige" data-prestige>Herbst einläuten</button>
+          <p class="hint" data-a-hint></p>
+          <h2 class="subhead">Humus-Verbesserungen</h2>
+          <div class="list" data-humus-list></div>
         </section>
         <section data-pane="system" hidden>
           <footer>
@@ -139,6 +175,36 @@ export class Panel {
     this.buffBox = q('[data-buffs]')
     this.upgradeEmpty = q('[data-upgrade-empty]')
     this.badge = q('[data-badge]')
+    this.autumnBadge = q('[data-a-badge]')
+    this.prestigeButton = q('[data-prestige]')
+    this.autumnHint = q('[data-a-hint]')
+    this.autumnFields = {
+      count: q('[data-a-count]'),
+      humus: q('[data-a-humus]'),
+      bonus: q('[data-a-bonus]'),
+      run: q('[data-a-run]'),
+      life: q('[data-a-life]'),
+    }
+    this.prestigeButton.addEventListener('click', () => this.actions.prestige())
+
+    const humusList = q('[data-humus-list]')
+    for (const def of HUMUS_UPGRADES) {
+      const button = document.createElement('button')
+      button.className = 'item humus-item'
+      button.innerHTML = `
+        <span class="row"><span class="name">${def.name}</span><span class="count" data-count>0</span></span>
+        <span class="row sub"><span data-cost></span></span>
+        <span class="desc" data-desc></span>`
+      button.addEventListener('click', () => this.actions.buyHumus(def.id))
+      humusList.appendChild(button)
+      this.humusRows.push({
+        id: def.id,
+        button,
+        count: button.querySelector<HTMLElement>('[data-count]')!,
+        cost: button.querySelector<HTMLElement>('[data-cost]')!,
+        desc: button.querySelector<HTMLElement>('[data-desc]')!,
+      })
+    }
 
     this.tabButtons = [...this.element.querySelectorAll<HTMLButtonElement>('[data-tab]')]
     this.panes = [...this.element.querySelectorAll<HTMLElement>('[data-pane]')]
@@ -225,7 +291,7 @@ export class Panel {
 
     this.pigCount.textContent = `${state.pigs}/${MAX_PIGS}`
     this.pigCost.textContent = state.pigs >= MAX_PIGS ? 'Maximal' : `${formatNumber(pigCost(state.pigs))} Nährstoffe`
-    this.pigRate.textContent = `Fundrate ×${spawnRateMultiplier(state.pigs).toFixed(1)}`
+    this.pigRate.textContent = `Fundrate ×${truffleRate(state).toFixed(1)}`
     this.pigDesc.textContent = `Schnüffelt Trüffel auf (+${Math.round(PIG_RATE_BONUS * 100)} % Fundrate je Schwein). Gefunden: ${state.trufflesFound}`
     this.pigButton.disabled = !canBuyPig(state)
 
@@ -256,7 +322,7 @@ export class Panel {
       const def = BUILDINGS.find((b) => b.id === row.id)!
       const owned = state.buildings[row.id] ?? 0
       row.count.textContent = String(owned)
-      row.cost.textContent = `${formatNumber(buildingCost(def, owned))} Nährstoffe`
+      row.cost.textContent = `${formatNumber(buildingCostFor(state, def))} Nährstoffe`
       row.prod.textContent = `+${formatNumber(unitProduction(state, def), 1)} / Sek je`
       row.button.disabled = !canBuyBuilding(state, row.id)
     }
@@ -289,6 +355,37 @@ export class Panel {
     this.badge.classList.toggle('zero', affordable === 0)
     this.badge.textContent = String(affordable)
     this.badge.title = `${affordable} Verbesserung${affordable === 1 ? '' : 'en'} kaufbar`
+
+    this.updateAutumn(state)
+  }
+
+  private updateAutumn(state: GameState): void {
+    const gain = prestigeGain(state)
+    const f = this.autumnFields
+    f.count.textContent = String(state.autumns)
+    f.humus.textContent = String(state.humus)
+    f.bonus.textContent = `×${humusMult(state).toFixed(2)}`
+    f.run.textContent = formatNumber(state.totalNutrients)
+    f.life.textContent = formatNumber(state.lifetimeNutrients)
+
+    this.autumnBadge.hidden = gain < 1
+    this.prestigeButton.disabled = !canPrestige(state)
+    this.prestigeButton.textContent = gain >= 1 ? `Herbst einläuten · +${gain} Humus` : 'Herbst einläuten'
+    const next = formatNumber((gain + 1) * (gain + 1) * HUMUS_DIVISOR)
+    this.autumnHint.textContent =
+      gain >= 1
+        ? `Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt. Humus, Schweine und Fundzähler bleiben. Jeder Humus gibt dauerhaft +${Math.round(HUMUS_BONUS * 100)} % Produktion. Nächster Humus bei ${next} Nährstoffen.`
+        : `Sammle in diesem Durchgang ${formatNumber(HUMUS_DIVISOR)} Nährstoffe für den ersten Humus. Die Bäume färben sich schon herbstlich, je näher du kommst.`
+
+    for (const row of this.humusRows) {
+      const def = HUMUS_UPGRADES.find((u) => u.id === row.id)!
+      const level = humusLevel(state, row.id)
+      const max = def.costs.length
+      row.count.textContent = `${level}/${max}`
+      row.cost.textContent = level >= max ? 'Maximal' : `${def.costs[level]} Humus`
+      row.desc.textContent = level >= max ? def.effect(level) : `${def.effect(level)} → ${def.effect(level + 1)}`
+      row.button.disabled = !canBuyHumusUpgrade(state, row.id)
+    }
   }
 
   setTab(name: string): void {

@@ -57,9 +57,29 @@ export function isClaimable(grid: Grid, i: number): boolean {
   return neighbors(i).some((n) => grid.claimed[n] || isTreeCell(n))
 }
 
-export function claimCostValue(grid: Grid, i: number): number {
-  const extra = claimedCount(grid) - INITIAL_CLAIMED
+/** `freeBase`: so viele erschlossene Felder gelten als geschenkt (Startfelder plus Humus-Bonus). */
+export function claimCostValue(grid: Grid, i: number, freeBase = INITIAL_CLAIMED): number {
+  const extra = Math.max(0, claimedCount(grid) - freeBase)
   return Math.floor(CLAIM_BASE_COST * Math.pow(CLAIM_GROWTH, extra) * (1 + 0.35 * rowOf(i)))
+}
+
+/** Erschließt `count` Felder rund um die Bäume, flache und baumnahe zuerst (Humus-Bonus beim Herbst). */
+export function claimStartCells(grid: Grid, count: number): void {
+  for (let n = 0; n < count; n++) {
+    let best = -1
+    let bestScore = Infinity
+    for (let i = 0; i < CELLS; i++) {
+      if (!isClaimable(grid, i)) continue
+      const dist = Math.min(...TREE_COLS.map((c) => Math.abs(colOf(i) - c)))
+      const score = rowOf(i) * 4 + dist
+      if (score < bestScore) {
+        bestScore = score
+        best = i
+      }
+    }
+    if (best < 0) return
+    grid.claimed[best] = true
+  }
 }
 
 export function nodeCountOf(grid: Grid, id: string): number {

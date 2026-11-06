@@ -242,7 +242,7 @@ footer .danger { box-shadow: inset 0 0 0 2px var(--danger); }
 .tabs {
   flex: none;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1.25fr 1fr 1.2fr 1fr 1fr;
   gap: 6px;
   padding: 12px 14px 0 22px;
   background: var(--wood);
@@ -310,3 +310,37 @@ footer { margin-top: 4px; }
 .subhead { margin: 22px 0 8px; }
 .item.pig { background: #4d3322; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #c98a7a; }
 .item.pig:hover:not(:disabled) { background: #5e3f2b; }
+
+/* --- Herbst / Prestige --- */
+.tab { font-size: 11px; letter-spacing: 0; }
+.badge.leaf { color: #2a1204; background: #f2a93c; box-shadow: 0 0 0 2px var(--wood-dark); }
+
+.autumn-card {
+  padding: 12px 14px;
+  background: var(--wood-dark);
+  box-shadow: inset 0 0 0 2px #0f0903;
+}
+
+.a-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; font-size: 13px; }
+.a-row.dim { color: #a8946c; font-size: 11px; }
+.a-row .humus { font-size: 18px; color: #f2a93c; }
+
+button.prestige {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 16px 10px;
+  font-size: 14px;
+  color: #2a1204;
+  background: #e08a2f;
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #f2c14e;
+}
+
+button.prestige:hover:not(:disabled) { background: #f09a3f; }
+button.prestige:active:not(:disabled) { transform: translateY(2px); }
+button.prestige:disabled { color: #8d7a58; background: #3a2616; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #5a432b; cursor: not-allowed; }
+
+.item.humus-item { background: #4a3014; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #c98a2f; }
+.item.humus-item:hover:not(:disabled) { background: #5e3d1a; }
+.item.humus-item .count { color: #f2a93c; }

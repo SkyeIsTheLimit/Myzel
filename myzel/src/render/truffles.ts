@@ -51,6 +51,8 @@ export class TruffleLayer {
   readonly pigLayer = new Container()
   /** Wird mit der Position des Trüffels in Canvas-Pixeln aufgerufen. */
   onCollect: (canvasX: number, canvasY: number) => void = () => {}
+  /** Sekunden, die ein Trüffel liegen bleibt (steigt mit Humus-Verbesserungen). */
+  lifetime = TRUFFLE_LIFETIME
 
   private random = rng(4242)
   private truffleTex = buildTruffleTexture()
@@ -155,7 +157,7 @@ export class TruffleLayer {
   private updateTruffles(dt: number): void {
     for (const t of [...this.items]) {
       t.age += dt
-      if (t.age >= TRUFFLE_LIFETIME) {
+      if (t.age >= this.lifetime) {
         this.remove(t)
         continue
       }
@@ -165,7 +167,7 @@ export class TruffleLayer {
       const pulse = 1 + 0.12 * Math.sin(this.time * 5 + t.cell)
       t.sprite.scale.set(s)
       t.glow.scale.set(s * 1.9 * pulse)
-      const remaining = TRUFFLE_LIFETIME - t.age
+      const remaining = this.lifetime - t.age
       const visible = remaining > BLINK_TIME || Math.floor(this.time * 8) % 2 === 0
       t.sprite.alpha = visible ? 1 : 0.35
       t.glow.alpha = (visible ? 0.75 : 0.2) * (0.7 + 0.3 * Math.sin(this.time * 5 + t.cell))

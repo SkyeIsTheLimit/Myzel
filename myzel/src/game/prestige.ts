@@ -1,7 +1,7 @@
 import Decimal from 'break_infinity.js'
 
 /** Gesammelte Nährstoffe eines Durchgangs, ab denen es den ersten Humus gibt. */
-export const HUMUS_DIVISOR = 1e5
+export const HUMUS_DIVISOR = 1e6
 /** Jeder je verdiente Humus erhöht die Produktion dauerhaft um diesen Anteil. */
 export const HUMUS_BONUS = 0.15
 
@@ -16,12 +16,12 @@ export function humusMultiplier(totalHumus: number): number {
 }
 
 /**
- * Wie weit der Herbst optisch fortgeschritten ist, 0 bis 1 (logarithmisch). Voll bei 1e7: Die Simulation zeigt, dass
- * der erste Herbst erst dort (ca. 10 Humus, nach rund 20 Minuten) wirklich lohnt, nicht schon beim ersten Humus.
+ * Wie weit der Herbst optisch fortgeschritten ist, 0 bis 1 (logarithmisch). Voll bei 1e8: Die Simulation zeigt, dass
+ * der erste Herbst erst dort (ca. 10 Humus) wirklich lohnt, nicht schon beim ersten Humus.
  */
 export function autumnProgress(runNutrients: Decimal): number {
-  const lo = 4 // 1e4
-  const hi = 7 // 1e7
+  const lo = 5 // 1e5
+  const hi = 8 // 1e8
   const v = runNutrients.lte(1) ? 0 : runNutrients.log10()
   return Math.max(0, Math.min(1, (v - lo) / (hi - lo)))
 }

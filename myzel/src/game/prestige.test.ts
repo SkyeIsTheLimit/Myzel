@@ -37,12 +37,12 @@ const earned = (n: number) => {
 }
 
 describe('Humus-Formel', () => {
-  it('Wurzel aus (gesammelt / 1e5)', () => {
-    expect(humusGain(new Decimal(99_999))).toBe(0)
-    expect(humusGain(new Decimal(1e5))).toBe(1)
-    expect(humusGain(new Decimal(4e5))).toBe(2)
-    expect(humusGain(new Decimal(1e7))).toBe(10)
-    expect(humusGain(new Decimal(1e9))).toBe(100)
+  it('Wurzel aus (gesammelt / 1e6)', () => {
+    expect(humusGain(new Decimal(999_999))).toBe(0)
+    expect(humusGain(new Decimal(1e6))).toBe(1)
+    expect(humusGain(new Decimal(4e6))).toBe(2)
+    expect(humusGain(new Decimal(1e8))).toBe(10)
+    expect(humusGain(new Decimal(1e10))).toBe(100)
   })
 
   it('wächst monoton und bleibt bei riesigen Zahlen endlich', () => {
@@ -57,9 +57,9 @@ describe('Humus-Formel', () => {
 
   it('Herbst-Fortschritt läuft logarithmisch von 0 bis 1', () => {
     expect(autumnProgress(new Decimal(0))).toBe(0)
-    expect(autumnProgress(new Decimal(1e4))).toBe(0)
-    expect(autumnProgress(new Decimal(10 ** 5.5))).toBeCloseTo(0.5)
-    expect(autumnProgress(new Decimal(1e7))).toBe(1)
+    expect(autumnProgress(new Decimal(1e5))).toBe(0)
+    expect(autumnProgress(new Decimal(10 ** 6.5))).toBeCloseTo(0.5)
+    expect(autumnProgress(new Decimal(1e8))).toBe(1)
     expect(autumnProgress(new Decimal(1e9))).toBe(1)
   })
 })
@@ -74,7 +74,7 @@ describe('Herbst einläuten', () => {
   })
 
   it('setzt Durchgang zurück, behält Humus, Schweine und Fundzähler', () => {
-    const s = earned(4e5)
+    const s = earned(4e6)
     s.buildings.hypha = 20
     s.upgrades.push('moist')
     s.grid.claimed[2] = true
@@ -120,13 +120,13 @@ describe('Herbst einläuten', () => {
   })
 
   it('lifetimeNutrients zählt über Durchgänge hinweg, totalNutrients nur den aktuellen', () => {
-    const s = earned(2e5)
-    s.lifetimeNutrients = new Decimal(2e5)
+    const s = earned(2e6)
+    s.lifetimeNutrients = new Decimal(2e6)
     prestige(s) // 1 Humus → Produktion ×1.15
     s.buildings.hypha = 10 // 1 / Sek
     tick(s, 10)
     expect(s.totalNutrients.toNumber()).toBeCloseTo(11.5)
-    expect(s.lifetimeNutrients.toNumber()).toBeCloseTo(2e5 + 11.5)
+    expect(s.lifetimeNutrients.toNumber()).toBeCloseTo(2e6 + 11.5)
   })
 })
 

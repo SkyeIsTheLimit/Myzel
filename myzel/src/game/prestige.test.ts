@@ -57,9 +57,9 @@ describe('Humus-Formel', () => {
 
   it('Herbst-Fortschritt läuft logarithmisch von 0 bis 1', () => {
     expect(autumnProgress(new Decimal(0))).toBe(0)
-    expect(autumnProgress(new Decimal(1e3))).toBe(0)
-    expect(autumnProgress(new Decimal(1e4))).toBeCloseTo(0.5)
-    expect(autumnProgress(new Decimal(1e5))).toBe(1)
+    expect(autumnProgress(new Decimal(1e4))).toBe(0)
+    expect(autumnProgress(new Decimal(10 ** 5.5))).toBeCloseTo(0.5)
+    expect(autumnProgress(new Decimal(1e7))).toBe(1)
     expect(autumnProgress(new Decimal(1e9))).toBe(1)
   })
 })

@@ -15,10 +15,13 @@ export function humusMultiplier(totalHumus: number): number {
   return 1 + HUMUS_BONUS * totalHumus
 }
 
-/** Wie weit der aktuelle Durchgang auf den ersten Humus zugelaufen ist, 0 bis 1 (logarithmisch, für die Herbstoptik). */
+/**
+ * Wie weit der Herbst optisch fortgeschritten ist, 0 bis 1 (logarithmisch). Voll bei 1e7: Die Simulation zeigt, dass
+ * der erste Herbst erst dort (ca. 10 Humus, nach rund 20 Minuten) wirklich lohnt, nicht schon beim ersten Humus.
+ */
 export function autumnProgress(runNutrients: Decimal): number {
-  const lo = 3 // 1e3
-  const hi = Math.log10(HUMUS_DIVISOR)
+  const lo = 4 // 1e4
+  const hi = 7 // 1e7
   const v = runNutrients.lte(1) ? 0 : runNutrients.log10()
   return Math.max(0, Math.min(1, (v - lo) / (hi - lo)))
 }

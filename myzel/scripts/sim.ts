@@ -21,6 +21,9 @@ import {
   canBuyPig,
   claimCell,
   claimCost,
+  ecoGainNow,
+  ecoPrestige,
+  nodeUnlocked,
   clickValue,
   collectTruffle,
   isUpgradeVisible,
@@ -100,6 +103,7 @@ function options(s: GameState, cps: number): Option[] {
     out.push({ cost: new Decimal(u.cost), gain, buy: () => buyUpgrade(s, u.id) })
   }
   for (const node of NODES) {
+    if (!nodeUnlocked(s, node.id)) continue
     let best: Option | null = null
     for (let i = 0; i < CELLS; i++) {
       const owned = s.grid.claimed[i]
@@ -211,6 +215,17 @@ while (t < end) {
     markIdx++
   }
 
+  // Ökosystem: in einer Sitzung, sobald sich das Wissen mindestens verdoppeln würde (mindestens 1 Punkt).
+  if (present && t % 60 === 0 && ecoGainNow(s) >= Math.max(1, s.ecoPoints)) {
+    const gainEco = ecoGainNow(s)
+    console.log(`>>> ÖKOSYSTEM ${s.ecos + 1}: Tag ${(t / 86400).toFixed(1)}, +${gainEco} Wissen → ${s.ecoPoints + gainEco}, Humus ${s.totalHumus}`)
+    ecoPrestige(s)
+    runStart = t
+    runPlayed = 0
+    markIdx = 0
+    timeline.length = 0
+  }
+
   // Laubfall: nur in einer Sitzung, wenn der Fortschritt stockt oder sich der Humus verdoppeln würde.
   const gain = prestigeGain(s)
   if (present && gain >= 1 && t === Math.floor(nextCheck - persona.check * 0.5)) {
@@ -230,4 +245,4 @@ while (t < end) {
 }
 
 console.log(`\n${persona.name}, ${DAYS} Tage: ${s.autumns} Laubfälle, gespielt ${fmtTime(played)}, Trüffel ${s.trufflesFound}`)
-console.log(`Humus ${s.totalHumus}, Humus-Stufen ${JSON.stringify(s.humusLevels)}, Sporen-Stufen ${JSON.stringify(s.sporeLevels)}, Netz ${s.web.length}/9, Schweine ${s.pigs}`)
+console.log(`Humus ${s.totalHumus}, Humus-Stufen ${JSON.stringify(s.humusLevels)}, Sporen-Stufen ${JSON.stringify(s.sporeLevels)}, Netz ${s.web.length}/9, Wissen ${s.ecoPoints} (${s.ecos} Ökosysteme), Schweine ${s.pigs}`)

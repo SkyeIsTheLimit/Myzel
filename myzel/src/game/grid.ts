@@ -1,8 +1,13 @@
 import { NODES, getNode } from './data.ts'
 
 export const GRID_COLS = 24
-export const GRID_ROWS = 7
-export const CELLS = GRID_COLS * GRID_ROWS
+/** Reihen zu Beginn; das Ökosystem schaltet bis `MAX_ROWS` weitere frei. */
+export const BASE_ROWS = 7
+export const MAX_ROWS = 10
+export const GRID_ROWS = MAX_ROWS
+/** Alle Felder, auch die noch gesperrten Reihen: Felder und Knoten sind immer so groß. */
+export const CELLS = GRID_COLS * MAX_ROWS
+export const BASE_CELLS = GRID_COLS * BASE_ROWS
 /** Spalten der drei Bäume; ihre Wurzelfelder liegen in der obersten Bodenreihe. */
 export const TREE_COLS = [4, 12, 20]
 export const DEPTH_BONUS = 0.2
@@ -13,6 +18,8 @@ export const REFUND_RATE = 0.5
 export interface Grid {
   claimed: boolean[]
   nodes: Array<string | null>
+  /** Aktive Reihen (7 bis 10); Felder darunter sind noch nicht freigeschaltet. */
+  rows: number
 }
 
 export const cellIndex = (col: number, row: number): number => row * GRID_COLS + col
@@ -36,8 +43,8 @@ export function neighbors(i: number): number[] {
 }
 
 /** Startfelder: links und rechts neben jedem Baum sowie darunter. */
-export function newGrid(): Grid {
-  const grid: Grid = { claimed: Array<boolean>(CELLS).fill(false), nodes: Array<string | null>(CELLS).fill(null) }
+export function newGrid(rows = BASE_ROWS): Grid {
+  const grid: Grid = { claimed: Array<boolean>(CELLS).fill(false), nodes: Array<string | null>(CELLS).fill(null), rows }
   for (const c of TREE_COLS) {
     grid.claimed[cellIndex(c - 1, 0)] = true
     grid.claimed[cellIndex(c + 1, 0)] = true
@@ -53,7 +60,7 @@ export function claimedCount(grid: Grid): number {
 }
 
 export function isClaimable(grid: Grid, i: number): boolean {
-  if (grid.claimed[i] || isTreeCell(i)) return false
+  if (grid.claimed[i] || isTreeCell(i) || rowOf(i) >= grid.rows) return false
   return neighbors(i).some((n) => grid.claimed[n] || isTreeCell(n))
 }
 
@@ -94,7 +101,8 @@ export function nodeCostValue(id: string, owned: number): number {
 export function canPlaceAt(grid: Grid, i: number, id: string): boolean {
   const def = getNode(id)
   if (!grid.claimed[i] || grid.nodes[i] !== null) return false
-  return def.maxRow === undefined || rowOf(i) <= def.maxRow
+  if (def.maxRow !== undefined && rowOf(i) > def.maxRow) return false
+  return def.minRow === undefined || rowOf(i) >= def.minRow
 }
 
 export interface BonusPart {

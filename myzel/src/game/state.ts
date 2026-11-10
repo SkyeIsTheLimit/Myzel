@@ -1,7 +1,9 @@
 import Decimal from 'break_infinity.js'
-import { BUILDINGS, NODES, UPGRADES, getBuilding } from './data.ts'
+import { BUILDINGS, NODES, UPGRADES, getBuilding, getNode } from './data.ts'
 import type { BuildingDef, UpgradeDef } from './data.ts'
+import { ecoGain, ecoMultiplier, rowsFor } from './eco.ts'
 import {
+  BASE_CELLS,
   CELLS,
   REFUND_RATE,
   canPlaceAt,
@@ -51,7 +53,7 @@ import type { BuffType } from './truffle.ts'
 import { formatNumber } from './format.ts'
 
 export const TICK_RATE = 10
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 /** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
 export const MAX_OFFLINE_SECONDS = 2 * 3600
 
@@ -80,6 +82,10 @@ export interface GameState {
   sporeLevels: Record<string, number>
   /** Erforschte Knoten des Wood Wide Web; bleiben über den Herbst hinweg erhalten. */
   web: string[]
+  /** Ökosystem-Wissen insgesamt: dauerhafter Bonus, mehr Gitterreihen, neue Knoten. Bleibt über alle Resets. */
+  ecoPoints: number
+  /** Wie oft das Ökosystem schon gegründet wurde. */
+  ecos: number
   /** Freigeschaltete Erfolge; jeder gibt einen kleinen dauerhaften Produktionsbonus. */
   achievements: string[]
   /** Jahreszeit und Wetter; nur Laufzeit, wird nicht gespeichert. */
@@ -120,6 +126,9 @@ export interface SaveData {
   web?: string[]
   /** Ab Version 7. */
   achievements?: string[]
+  /** Ab Version 8. */
+  ecoPoints?: number
+  ecos?: number
   lastSaved: number
 }
 
@@ -145,6 +154,8 @@ export function newState(now = Date.now()): GameState {
     sporeLevels: {},
     web: [],
     achievements: [],
+    ecoPoints: 0,
+    ecos: 0,
     env: { ...NEUTRAL_ENV },
     lastSaved: now,
   }
@@ -267,6 +278,7 @@ function basePerSecond(state: GameState): Decimal {
     .mul(denseMult(sporeLevel(state, 'dense')))
     .mul(webFx(state).global)
     .mul(achievementMult(state.achievements.length))
+    .mul(ecoMultiplier(state.ecoPoints))
 }
 
 /** Sporen pro Sekunde: Fruchtkörper und Fruchtknoten, mit „Sporenernte“. */
@@ -285,6 +297,7 @@ export function clickValue(state: GameState): Decimal {
   return new Decimal(1)
     .mul(mult)
     .mul(humusMult(state))
+    .mul(ecoMultiplier(state.ecoPoints))
     .add(basePerSecond(state).mul(0.01))
     .mul(buffMult(state, 'click'))
     .mul(envFx(state).click)
@@ -325,8 +338,13 @@ export function nodeCost(state: GameState, id: string): Decimal {
   return new Decimal(nodeCostValue(id, nodeCountOf(state.grid, id)))
 }
 
+/** Ist der Knotentyp durch das Ökosystem-Wissen schon baubar? */
+export function nodeUnlocked(state: GameState, id: string): boolean {
+  return state.ecoPoints >= (getNode(id).unlockPoints ?? 0)
+}
+
 export function canPlace(state: GameState, i: number, id: string): boolean {
-  return canPlaceAt(state.grid, i, id) && state.nutrients.gte(nodeCost(state, id))
+  return nodeUnlocked(state, id) && canPlaceAt(state.grid, i, id) && state.nutrients.gte(nodeCost(state, id))
 }
 
 export function placeNode(state: GameState, i: number, id: string): boolean {
@@ -488,8 +506,44 @@ export function prestige(state: GameState): number {
   for (const b of BUILDINGS) state.buildings[b.id] = 0
   state.upgrades = []
   state.buffs = []
-  state.grid = newGrid()
+  state.grid = newGrid(rowsFor(state.ecoPoints))
   claimStartCells(state.grid, startCells(humusLevel(state, 'web')))
+  return gain
+}
+
+/** Ökosystem-Wissen, das ein Ökosystem jetzt bringen würde (nach dem gesamten Humus dieses Durchgangs). */
+export function ecoGainNow(state: GameState): number {
+  return ecoGain(state.totalHumus)
+}
+
+export function canEco(state: GameState): boolean {
+  return ecoGainNow(state) >= 1
+}
+
+/**
+ * Gründet ein Ökosystem: gibt Wissen und setzt fast alles zurück (Nährstoffe, Gebäude, Verbesserungen, Gitter,
+ * Schweine, Humus samt Verbesserungen, Laubfälle, Sporen, Wood Wide Web). Bleiben: Wissen, Erfolge und die
+ * Zähler (Klicks, Trüffelfunde, gesammelte Nährstoffe insgesamt). Gibt das erhaltene Wissen zurück (0 = noch nicht möglich).
+ */
+export function ecoPrestige(state: GameState): number {
+  const gain = ecoGainNow(state)
+  if (gain < 1) return 0
+  state.ecoPoints += gain
+  state.ecos += 1
+  state.nutrients = new Decimal(0)
+  state.totalNutrients = new Decimal(0)
+  for (const b of BUILDINGS) state.buildings[b.id] = 0
+  state.upgrades = []
+  state.buffs = []
+  state.pigs = 0
+  state.humus = 0
+  state.totalHumus = 0
+  state.humusLevels = {}
+  state.autumns = 0
+  state.spores = 0
+  state.sporeLevels = {}
+  state.web = []
+  state.grid = newGrid(rowsFor(state.ecoPoints))
   return gain
 }
 
@@ -576,6 +630,8 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     sporeLevels: { ...state.sporeLevels },
     web: [...state.web],
     achievements: [...state.achievements],
+    ecoPoints: state.ecoPoints,
+    ecos: state.ecos,
     lastSaved: now,
   }
 }
@@ -583,8 +639,10 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
 function deserializeGrid(data: SaveData['grid']): Grid {
   const grid = newGrid()
   if (!data || typeof data.claimed !== 'string' || !Array.isArray(data.nodes)) return grid
-  if (data.claimed.length !== CELLS || data.nodes.length !== CELLS) return grid
-  for (let i = 0; i < CELLS; i++) {
+  // Ältere Spielstände hatten nur die sieben Grundreihen; die Felder liegen zeilenweise, also passen die Indizes.
+  const length = data.claimed.length
+  if ((length !== CELLS && length !== BASE_CELLS) || data.nodes.length !== length) return grid
+  for (let i = 0; i < length; i++) {
     if (isTreeCell(i)) continue
     grid.claimed[i] = data.claimed[i] === '1'
     const id = data.nodes[i]
@@ -597,7 +655,7 @@ export function deserialize(data: unknown): GameState | null {
   if (typeof data !== 'object' || data === null) return null
   const d = data as Partial<SaveData>
   // Version 1 hatte noch kein Gitter; es wird dann mit den Startfeldern angelegt.
-  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== 5 && d.version !== 6 && d.version !== SAVE_VERSION) return null
+  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== 5 && d.version !== 6 && d.version !== 7 && d.version !== SAVE_VERSION) return null
   if (typeof d.nutrients !== 'string' || typeof d.totalNutrients !== 'string') return null
   const state = newState(typeof d.lastSaved === 'number' ? d.lastSaved : Date.now())
   state.nutrients = new Decimal(d.nutrients)
@@ -630,6 +688,9 @@ export function deserialize(data: unknown): GameState | null {
     if (level > 0) state.sporeLevels[def.id] = Math.min(level, def.costs.length)
   }
   state.web = Array.isArray(d.web) ? WEB_NODES.map((n) => n.id).filter((id) => d.web!.includes(id)) : []
+  state.ecoPoints = count(d.ecoPoints)
+  state.ecos = count(d.ecos)
+  state.grid.rows = rowsFor(state.ecoPoints)
   state.achievements = Array.isArray(d.achievements) ? ACHIEVEMENTS.map((a) => a.id).filter((id) => d.achievements!.includes(id)) : []
   return state
 }

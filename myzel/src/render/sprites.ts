@@ -253,6 +253,9 @@ export interface NodeTextures {
   decomposer: Texture
   conduit: Texture
   fruit: Texture
+  glow: Texture
+  slime: Texture
+  moss: Texture
 }
 
 export function buildNodeTextures(): NodeTextures {
@@ -290,6 +293,29 @@ export function buildNodeTextures(): NodeTextures {
       px(ctx, 0, 7, '#9fe8c8', 16, 2)
       px(ctx, 7, 0, '#9fe8c8', 2, 16)
       px(ctx, 6, 6, '#e9fff3', 4, 4)
+    }),
+    // Leuchtpilz: heller, bläulich leuchtender Schirm auf dünnem Stiel.
+    glow: make((ctx) => {
+      px(ctx, 7, 9, '#cfe9f0', 2, 7)
+      const rows: Array<[number, number]> = [[5, 6], [3, 10], [2, 12], [2, 12]]
+      rows.forEach(([x, w], i) => {
+        px(ctx, x, 3 + i, '#58c7d9', w, 1)
+        px(ctx, x, 3 + i, '#9ff0f5', 1, 1)
+      })
+      px(ctx, 2, 7, '#2a8fa6', 12, 1)
+      for (const [x, y] of [[5, 4], [9, 5], [7, 3]]) px(ctx, x, y, '#e8ffff', 1, 1)
+    }),
+    // Schleimpilz: gelbgrüner, weich fließender Klumpen mit Adern.
+    slime: make((ctx) => {
+      disc(ctx, 7.5, 8.5, 6.4, (dx, dy) => (dx + dy > 4 ? '#7a8f1e' : dx + dy < -4 ? '#e5f07a' : '#b8cf3a'))
+      for (const [x, y, w, h] of [[4, 6, 6, 1], [7, 4, 1, 6], [5, 9, 5, 1], [9, 7, 1, 4]]) px(ctx, x, y, '#fff7a0', w, h)
+    }),
+    // Torfmoos: dunkler, dichter Polster aus kleinen Moospolstern.
+    moss: make((ctx) => {
+      px(ctx, 1, 8, '#3f2a18', 14, 7)
+      const bumps: Array<[number, number, number]> = [[3, 8, 3], [7, 6, 4], [11, 8, 3], [5, 11, 3], [10, 11, 3]]
+      for (const [cx, cy, r] of bumps) disc(ctx, cx + 0.5, cy + 0.5, r, (dx, dy) => (dy > 1 ? '#2d6a2b' : dx < 0 ? '#58b04a' : '#3f8f3a'))
+      for (const [x, y] of [[4, 6], [8, 5], [11, 7]]) px(ctx, x, y, '#a6e07a', 1, 1)
     }),
     fruit: make((ctx) => {
       px(ctx, 6, 9, '#efe6d0', 4, 7)

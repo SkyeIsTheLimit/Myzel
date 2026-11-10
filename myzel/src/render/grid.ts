@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite } from 'pixi.js'
 import type { FederatedPointerEvent, Texture } from 'pixi.js'
-import { CELLS, GRID_COLS, GRID_ROWS, colOf, isClaimable, isTreeCell, neighbors, rowOf } from '../game/grid.ts'
+import { BASE_ROWS, CELLS, GRID_COLS, colOf, isClaimable, isTreeCell, neighbors, rowOf } from '../game/grid.ts'
 import type { GameState } from '../game/state.ts'
 import { SURFACE_Y, TILE, WORLD_W, buildGlowTexture, buildNodeTextures } from './sprites.ts'
 import type { NodeTextures } from './sprites.ts'
@@ -32,9 +32,10 @@ export class GridView {
   private ghost = new Sprite()
   private pulses: Array<{ sprite: Sprite; phase: number }> = []
   private time = 0
+  private rows = BASE_ROWS
 
   constructor() {
-    this.container.hitArea = new Rectangle(0, GRID_TOP, WORLD_W, GRID_ROWS * TILE)
+    this.setRows(BASE_ROWS)
     this.container.eventMode = 'static'
     this.container.cursor = 'pointer'
     this.ghost.alpha = 0.6
@@ -46,7 +47,7 @@ export class GridView {
       const p = this.container.toLocal(e.global)
       const col = Math.floor(p.x / TILE)
       const row = Math.floor((p.y - GRID_TOP) / TILE)
-      if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return -1
+      if (col < 0 || col >= GRID_COLS || row < 0 || row >= this.rows) return -1
       return row * GRID_COLS + col
     }
     this.container.on('pointermove', (e: FederatedPointerEvent) => {
@@ -60,15 +61,24 @@ export class GridView {
     })
   }
 
+  /** Aktive Gitterreihen: nur dort lässt sich klicken. */
+  private setRows(rows: number): void {
+    this.rows = rows
+    this.container.hitArea = new Rectangle(0, GRID_TOP, WORLD_W, rows * TILE)
+  }
+
   /** Zeichnet gesperrte Felder und Knoten neu. Nach jeder Zustandsänderung aufrufen. */
   refresh(state: GameState): void {
     const { grid } = state
+    if (grid.rows !== this.rows) this.setRows(grid.rows)
     this.overlay.clear()
     this.nodeLayer.removeChildren().forEach((c) => c.destroy())
     this.pulses = []
     this.drawThreads(state)
 
     for (let i = 0; i < CELLS; i++) {
+      // Noch nicht freigeschaltete Reihen bleiben leer (der Boden dort ist abgedunkelt).
+      if (rowOf(i) >= grid.rows) continue
       const x = colOf(i) * TILE
       const y = GRID_TOP + rowOf(i) * TILE
       // Baumwurzelfelder werden von der Welt gezeichnet (unter dem Myzel).

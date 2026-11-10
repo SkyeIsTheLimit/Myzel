@@ -3,6 +3,7 @@ import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
 import { HUMUS_DIVISOR, HUMUS_UPGRADES, humusMultiplier } from '../game/prestige.ts'
 import { ACHIEVEMENTS, ACHIEVEMENT_BONUS } from '../game/achievements.ts'
+import { ECO_DIVISOR, ECO_ROW_UNLOCKS, ecoMultiplier, humusForPoints } from '../game/eco.ts'
 import { SEASON_NAMES, WEATHERS, envEffects } from '../game/weather.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
 import { WEB_BRANCHES, WEB_NODES, connectedTrees, getWebNode, webRequirementsMet } from '../game/web.ts'
@@ -17,6 +18,8 @@ import {
   canBuyPig,
   canBuySporeUpgrade,
   canBuyWeb,
+  ecoGainNow,
+  nodeUnlocked,
   canBuyUpgrade,
   canPrestige,
   clickValue,
@@ -37,6 +40,7 @@ export interface PanelActions {
   selectTool: (tool: Tool) => void
   buyPig: () => void
   prestige: () => void
+  eco: () => void
   buyHumus: (id: string) => void
   buySpore: (id: string) => void
   buyWeb: (id: string) => void
@@ -108,6 +112,11 @@ export class Panel {
   private achSummary: HTMLElement
   private envBox: HTMLElement
   private envKey = ''
+  private ecoSection: HTMLElement
+  private ecoButton: HTMLButtonElement
+  private ecoHint: HTMLElement
+  private ecoFields: Record<'points' | 'bonus' | 'rows' | 'count', HTMLElement>
+  private ecoUnlockRows: Array<{ points: number; row: HTMLElement }> = []
   private webSummary: HTMLElement
   private sporeStat: HTMLElement
   private sporeValue: HTMLElement
@@ -165,7 +174,7 @@ export class Panel {
         <button class="tab" role="tab" data-tab="growth">Wachstum</button>
         <button class="tab" role="tab" data-tab="nodes">Knoten</button>
         <button class="tab" role="tab" data-tab="upgrades">Upgrades<span class="badge zero" data-badge>0</span></button>
-        <button class="tab" role="tab" data-tab="web" data-web-tab hidden>Wood Wide Web</button>
+        <button class="tab" role="tab" data-tab="web" data-web-tab>Wood Wide Web</button>
         <button class="tab" role="tab" data-tab="autumn">Laubfall<span class="badge leaf" data-a-badge hidden>!</span></button>
         <div class="tab-pair">
           <button class="tab" role="tab" data-tab="achievements">Erfolge</button>
@@ -225,6 +234,19 @@ export class Panel {
           <p class="hint" data-a-hint></p>
           <h2 class="subhead">Humus-Verbesserungen</h2>
           <div class="list" data-humus-list></div>
+          <div data-eco-section hidden>
+            <h2 class="subhead">Ökosystem</h2>
+            <div class="autumn-card eco-card">
+              <div class="a-row"><span>Wissen</span><span class="eco-points" data-e-points>0</span></div>
+              <div class="a-row"><span>Produktionsbonus</span><span data-e-bonus>×1.00</span></div>
+              <div class="a-row dim"><span>Gitterreihen</span><span data-e-rows>7</span></div>
+              <div class="a-row dim"><span>Ökosysteme</span><span data-e-count>0</span></div>
+            </div>
+            <button class="prestige eco" data-eco>Ökosystem gründen</button>
+            <p class="hint" data-e-hint></p>
+            <h2 class="subhead">Mit Wissen freischalten</h2>
+            <div class="eco-unlocks" data-e-unlocks></div>
+          </div>
         </section>
         <section data-pane="achievements" hidden>
           <p class="hint small" data-ach-summary></p>
@@ -268,6 +290,27 @@ export class Panel {
       life: q('[data-a-life]'),
     }
     this.prestigeButton.addEventListener('click', () => this.actions.prestige())
+
+    this.ecoSection = q('[data-eco-section]')
+    this.ecoButton = q<HTMLButtonElement>('[data-eco]')
+    this.ecoHint = q('[data-e-hint]')
+    this.ecoFields = { points: q('[data-e-points]'), bonus: q('[data-e-bonus]'), rows: q('[data-e-rows]'), count: q('[data-e-count]') }
+    this.ecoButton.addEventListener('click', () => this.actions.eco())
+    // Liste der Freischaltungen: je Wissensstufe neue Gitterreihen und Knoten.
+    const unlocks = new Map<number, string[]>()
+    const add = (points: number, text: string): void => {
+      unlocks.set(points, [...(unlocks.get(points) ?? []), text])
+    }
+    ECO_ROW_UNLOCKS.forEach((points, i) => add(points, `Gitterreihe ${8 + i}`))
+    for (const def of NODES) if (def.unlockPoints) add(def.unlockPoints, `Knoten ${def.name}`)
+    const unlockList = q('[data-e-unlocks]')
+    for (const points of [...unlocks.keys()].sort((a, b) => a - b)) {
+      const row = document.createElement('div')
+      row.className = 'eco-unlock'
+      row.innerHTML = `<span class="eco-unlock-points">${points} Wissen</span><span>${unlocks.get(points)!.join(' · ')}</span>`
+      unlockList.appendChild(row)
+      this.ecoUnlockRows.push({ points, row })
+    }
 
     const humusList = q('[data-humus-list]')
     for (const def of HUMUS_UPGRADES) {
@@ -421,8 +464,12 @@ export class Panel {
       row.button.classList.toggle('selected', row.id === tool)
       if (row.id === REMOVE_TOOL) continue
       const cost = nodeCost(state, row.id)
-      row.cost.textContent = `${formatNumber(cost)} Nährstoffe`
-      row.button.classList.toggle('poor', state.nutrients.lt(cost))
+      const unlocked = nodeUnlocked(state, row.id)
+      row.button.classList.toggle('locked', !unlocked)
+      row.button.disabled = !unlocked
+      const need = NODES.find((n) => n.id === row.id)?.unlockPoints ?? 0
+      row.cost.textContent = unlocked ? `${formatNumber(cost)} Nährstoffe` : `Gesperrt: ab ${need} Wissen (Ökosystem)`
+      row.button.classList.toggle('poor', unlocked && state.nutrients.lt(cost))
       if (row.count) row.count.textContent = String(nodeCountOf(state.grid, row.id))
     }
 
@@ -497,6 +544,7 @@ export class Panel {
 
     this.updateAutumn(state)
     this.updateAchievements(state)
+    this.updateEco(state)
     this.updateEnv(state)
   }
 
@@ -518,6 +566,26 @@ export class Panel {
     this.envBox.innerHTML = `<span class="env-name">${SEASON_NAMES[season]} · ${w.name}</span><span class="env-fx">${chips}</span>`
   }
 
+  /** Ökosystem-Bereich im Laubfall-Tab. */
+  private updateEco(state: GameState): void {
+    const known = state.totalHumus >= 100 || state.ecoPoints > 0 || state.ecos > 0
+    this.ecoSection.hidden = !known
+    if (!known) return
+    const gain = ecoGainNow(state)
+    const f = this.ecoFields
+    f.points.textContent = String(state.ecoPoints)
+    f.bonus.textContent = `×${ecoMultiplier(state.ecoPoints).toFixed(2)}`
+    f.rows.textContent = String(state.grid.rows)
+    f.count.textContent = String(state.ecos)
+    this.ecoButton.disabled = gain < 1
+    this.ecoButton.textContent = gain >= 1 ? `Ökosystem gründen · +${gain} Wissen` : 'Ökosystem gründen'
+    this.ecoHint.textContent =
+      gain >= 1
+        ? `Setzt ALLES zurück: Gebäude, Humus, Laubfälle, Sporen, Wood Wide Web und Schweine. Es bleiben Wissen, Erfolge und Zähler. Das nächste Wissen gibt es bei ${formatNumber(humusForPoints(gain + 1))} Humus.`
+        : `Sammle in einem Durchgang ${formatNumber(ECO_DIVISOR)} Humus für das erste Wissen (jetzt ${formatNumber(state.totalHumus)}). Jedes weitere Wissen braucht mehr: etwa 4.000 für 2, 9.000 für 3.`
+    for (const { points, row } of this.ecoUnlockRows) row.classList.toggle('done', state.ecoPoints >= points)
+  }
+
   private updateAchievements(state: GameState): void {
     const n = state.achievements.length
     this.achSummary.textContent = `${n} / ${ACHIEVEMENTS.length} freigeschaltet · +${Math.round(n * ACHIEVEMENT_BONUS * 100)} % Produktion`
@@ -527,7 +595,8 @@ export class Panel {
   /** Zeigt den Forschungsbaum; gibt die Zahl kaufbarer Forschungen zurück. */
   private updateWeb(state: GameState): number {
     const known = state.spores > 0 || sporesPerSecond(state) > 0 || state.web.length > 0
-    this.webTab.hidden = !known
+    // Der Tab bleibt immer an seinem Platz; ohne Sporen wirkt er nur gedämpft.
+    this.webTab.classList.toggle('dim', !known)
     if (!known) return 0
     this.webSummary.textContent = `Verbundene Bäume: ${connectedTrees(state.web)} / 3 · Erforscht: ${state.web.length} / ${WEB_NODES.length}`
     let affordable = 0

@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js'
 import type { Application, FederatedPointerEvent } from 'pixi.js'
-import { TREE_COLS } from '../game/grid.ts'
+import { BASE_ROWS, MAX_ROWS, TREE_COLS } from '../game/grid.ts'
 import { Forest } from './forest.ts'
 import { TruffleLayer } from './truffles.ts'
 import { WeatherLayer } from './weather.ts'
@@ -35,6 +35,9 @@ import {
 const SIDE = 384
 const SKY_EXTRA = 400
 const DEPTH_EXTRA = 400
+
+/** Höhe der Welt mit allen möglichen Gitterreihen; das sichtbare Spielfeld ist je nach Ökosystem niedriger. */
+const MAX_H = SURFACE_Y + TILE + MAX_ROWS * TILE
 
 const DAY_LENGTH = 300
 const HYPHA_COUNT = 1300
@@ -101,6 +104,8 @@ export class World {
   private stars: Sprite[] = []
   private moonHalo = new Graphics()
   private ground = new Container()
+  private shade = new Graphics()
+  private fieldH = WORLD_H
   /** Baumwurzeln im Boden; bekommen nachts dieselbe Farbe wie die Bäume darüber. */
   private rootSprite = new Sprite()
   private clouds: Array<{ sprite: Sprite; speed: number }> = []
@@ -202,18 +207,13 @@ export class World {
     this.ground = ground
 
     // Außerhalb des Spielfelds ist der Boden unerreichbar und wird abgedunkelt.
-    const shade = new Graphics()
-    const shadeTop = SURFACE_Y + TILE
-    const shadeColor = { color: 0x0a0604, alpha: 0.6 }
-    shade.rect(-SIDE, shadeTop, SIDE, WORLD_H - shadeTop + DEPTH_EXTRA).fill(shadeColor)
-    shade.rect(WORLD_W, shadeTop, SIDE, WORLD_H - shadeTop + DEPTH_EXTRA).fill(shadeColor)
-    shade.rect(0, WORLD_H, WORLD_W, DEPTH_EXTRA).fill(shadeColor)
-    this.stage.addChild(shade)
+    this.drawShade()
+    this.stage.addChild(this.shade)
 
     // Baumwurzeln: verbreiterter Stammfuß, von dem aus sich Wurzeln fächerförmig nach unten verzweigen.
     const rootTop = SURFACE_Y + 6
-    const roots = generateRoots(7, TREE_X, rootTop, WORLD_W, WORLD_H)
-    const rootLayer = makeCanvas(WORLD_W, WORLD_H)
+    const roots = generateRoots(7, TREE_X, rootTop, WORLD_W, MAX_H)
+    const rootLayer = makeCanvas(WORLD_W, MAX_H)
     const rc = rootLayer.ctx
     for (const x of TREE_X) {
       for (let dy = 0; dy < 10; dy++) {
@@ -324,16 +324,16 @@ export class World {
     // Nacht-Abdunklung liegt über Welt, aber unter dem leuchtenden Myzel.
     this.nightOverlay.position.set(-SIDE, -SKY_EXTRA)
     this.nightOverlay.width = WORLD_W + 2 * SIDE
-    this.nightOverlay.height = WORLD_H + SKY_EXTRA + DEPTH_EXTRA
+    this.nightOverlay.height = MAX_H + SKY_EXTRA + DEPTH_EXTRA
     this.nightOverlay.alpha = 0
     this.stage.addChild(this.nightOverlay)
     this.stage.addChild(this.forest.fireflies)
     this.stage.addChild(this.weatherLayer.container)
 
     // Myzel
-    this.points = generateHyphae(42, TREE_X, HYPHA_TOP, WORLD_W, WORLD_H, HYPHA_COUNT)
-    const glow = makeCanvas(WORLD_W, WORLD_H)
-    const core = makeCanvas(WORLD_W, WORLD_H)
+    this.points = generateHyphae(42, TREE_X, HYPHA_TOP, WORLD_W, MAX_H, HYPHA_COUNT)
+    const glow = makeCanvas(WORLD_W, MAX_H)
+    const core = makeCanvas(WORLD_W, MAX_H)
     this.glowCtx = glow.ctx
     this.coreCtx = core.ctx
     this.glowTex = toTexture(glow.canvas)
@@ -344,7 +344,7 @@ export class World {
     // Der schwarze Schleier liegt über allem (auch über Boden und Myzel) und deckt die ganze Welt.
     this.veil.position.set(-SIDE, -SKY_EXTRA)
     this.veil.width = WORLD_W + 2 * SIDE
-    this.veil.height = WORLD_H + SKY_EXTRA + DEPTH_EXTRA
+    this.veil.height = MAX_H + SKY_EXTRA + DEPTH_EXTRA
     this.veil.alpha = 0
     this.stage.addChild(this.veil)
     this.reveal(6)
@@ -352,7 +352,31 @@ export class World {
 
   /** Zentriert das Spielfeld im sichtbaren Bereich; der Rest zeigt Himmel, Wald und tiefen Boden. */
   setViewport(width: number, height: number): void {
-    this.stage.position.set(Math.floor((width - WORLD_W) / 2), Math.floor((height - WORLD_H) / 2))
+    this.stage.position.set(Math.floor((width - WORLD_W) / 2), Math.floor((height - this.fieldH) / 2))
+  }
+
+  /** Höhe des sichtbaren Spielfelds in Weltpixeln (wächst mit den freigeschalteten Gitterreihen). */
+  get fieldHeight(): number {
+    return this.fieldH
+  }
+
+  /** Setzt die aktiven Gitterreihen; gibt zurück, ob sich die Spielfeldhöhe geändert hat. */
+  setRows(rows: number): boolean {
+    const fieldH = SURFACE_Y + TILE + Math.max(BASE_ROWS, Math.min(MAX_ROWS, rows)) * TILE
+    if (fieldH === this.fieldH) return false
+    this.fieldH = fieldH
+    this.drawShade()
+    return true
+  }
+
+  /** Außerhalb des Spielfelds ist der Boden unerreichbar und wird abgedunkelt. */
+  private drawShade(): void {
+    const shadeTop = SURFACE_Y + TILE
+    const shadeColor = { color: 0x0a0604, alpha: 0.6 }
+    this.shade.clear()
+    this.shade.rect(-SIDE, shadeTop, SIDE, MAX_H - shadeTop + DEPTH_EXTRA).fill(shadeColor)
+    this.shade.rect(WORLD_W, shadeTop, SIDE, MAX_H - shadeTop + DEPTH_EXTRA).fill(shadeColor)
+    this.shade.rect(0, this.fieldH, WORLD_W, MAX_H - this.fieldH + DEPTH_EXTRA).fill(shadeColor)
   }
 
   /** Herbst-Fortschritt 0 bis 1: Bäume färben sich um, Blätter fallen. */
@@ -479,8 +503,8 @@ export class World {
   private reveal(target: number): void {
     const count = Math.min(target, this.points.length)
     if (count < this.revealed) {
-      this.coreCtx.clearRect(0, 0, WORLD_W, WORLD_H)
-      this.glowCtx.clearRect(0, 0, WORLD_W, WORLD_H)
+      this.coreCtx.clearRect(0, 0, WORLD_W, MAX_H)
+      this.glowCtx.clearRect(0, 0, WORLD_W, MAX_H)
       this.revealed = 0
     }
     for (let i = this.revealed; i < count; i++) {

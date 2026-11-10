@@ -24,6 +24,9 @@ import {
   offlineCap,
   placeNode,
   prestige as startAutumn,
+  ecoGainNow,
+  ecoPrestige,
+  nodeUnlocked,
   prestigeGain,
   removeNode,
   tick,
@@ -99,11 +102,12 @@ async function main(): Promise<void> {
     // Das Spielfeld bekommt, was die linke Spalte neben Kopf und Fußleiste übrig lässt.
     const availW = wrapEl.clientWidth - 24
     const availH = wrapEl.clientHeight - 24
-    // Ganzzahliger Pixel-Maßstab, so groß, dass das Spielfeld (384×216) noch komplett passt.
-    scale = Math.max(1, Math.floor(Math.min(availW / WORLD_W, availH / WORLD_H)))
+    // Ganzzahliger Pixel-Maßstab, so groß, dass das Spielfeld (384 Pixel breit, je nach Ökosystem 216 bis 264 hoch) passt.
+    const fieldH = world.fieldHeight
+    scale = Math.max(1, Math.floor(Math.min(availW / WORLD_W, availH / fieldH)))
     // Der Canvas füllt die gesamte Fläche; das Spielfeld sitzt zentriert darin.
     const viewW = Math.max(WORLD_W, Math.floor(availW / scale))
-    const viewH = Math.max(WORLD_H, Math.floor(availH / scale))
+    const viewH = Math.max(fieldH, Math.floor(availH / scale))
     app.renderer.resize(viewW, viewH)
     world.setViewport(viewW, viewH)
     app.canvas.style.width = `${viewW * scale}px`
@@ -145,6 +149,8 @@ async function main(): Promise<void> {
     world.truffles.lifetime = truffleLifetime(state)
     world.setAutumn(autumnProgress(state.totalNutrients))
     world.setWebLinks(connectedTrees(state.web) - 1)
+    // Neue Gitterreihen (Ökosystem) machen das Spielfeld höher: Maßstab neu berechnen.
+    if (world.setRows(state.grid.rows)) resize()
   }
 
   // Trüffel: zufällige Funde, Schweine verkürzen die Wartezeit.
@@ -225,6 +231,8 @@ async function main(): Promise<void> {
   }
 
   const selectTool = (next: Tool): void => {
+    // Noch nicht durch Ökosystem-Wissen freigeschaltete Knoten lassen sich nicht wählen.
+    if (next && next !== REMOVE_TOOL && !nodeUnlocked(state, next)) return
     tool = next === tool ? null : next
     if (tool) panel.setTab('nodes')
     panel.update(state, tool)
@@ -268,6 +276,24 @@ async function main(): Promise<void> {
       refreshAll()
       saveGame(state)
       showToast(`Der Laubfall hat begonnen! +${gain} Humus`, 6000)
+    },
+    eco: async () => {
+      const gain = ecoGainNow(state)
+      if (gain < 1) return
+      const ok = await askConfirm(
+        `Ökosystem gründen?\n\nDu erhältst ${gain} Wissen: dauerhaft mehr Produktion, und ab bestimmten Stufen neue Gitterreihen und Knoten.\n\n` +
+          'ACHTUNG: Alles wird zurückgesetzt, auch Humus, Laubfälle, Sporen, Wood Wide Web und Schweine. ' +
+          'Nur Wissen, Erfolge und Zähler bleiben.',
+        'Ökosystem gründen',
+        true,
+      )
+      if (!ok) return
+      ecoPrestige(state)
+      tool = null
+      world.leafBurst()
+      refreshAll()
+      saveGame(state)
+      showToast(`Ein neues Ökosystem entsteht! +${gain} Wissen`, 7000)
     },
     save: () => { saveGame(state); showToast('Gespeichert.', 1500) },
     exportSave: async () => {

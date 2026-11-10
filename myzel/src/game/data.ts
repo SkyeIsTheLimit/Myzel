@@ -53,6 +53,10 @@ export interface NodeDef {
   baseProd: number
   /** Höchste erlaubte Reihe (0 = oberste Bodenreihe); fehlt = überall erlaubt. */
   maxRow?: number
+  /** Niedrigste erlaubte Reihe (nur tief im Boden). */
+  minRow?: number
+  /** Ab so viel Ökosystem-Wissen (insgesamt) baubar; fehlt = von Anfang an. */
+  unlockPoints?: number
   rules: NeighborRule[]
 }
 
@@ -97,6 +101,49 @@ export const NODES: NodeDef[] = [
     baseProd: 40,
     maxRow: 1,
     rules: [{ neighbor: 'conduit', bonus: 0.75 }],
+  },
+  {
+    id: 'glow',
+    name: 'Leuchtpilz',
+    desc: '+50 % je Zersetzer und Fruchtknoten, +25 % je Leuchtpilz nebenan.',
+    baseCost: 25_000,
+    costGrowth: 1.13,
+    baseProd: 250,
+    unlockPoints: 1,
+    rules: [
+      { neighbor: 'decomposer', bonus: 0.5 },
+      { neighbor: 'fruit', bonus: 0.5 },
+      { neighbor: 'glow', bonus: 0.25 },
+    ],
+  },
+  {
+    id: 'slime',
+    name: 'Schleimpilz',
+    desc: 'Nur ab der vierten Reihe. +80 % je Leitbahn, +40 % je Wurzelkontakt.',
+    baseCost: 150_000,
+    costGrowth: 1.13,
+    baseProd: 1500,
+    minRow: 3,
+    unlockPoints: 2,
+    rules: [
+      { neighbor: 'conduit', bonus: 0.8 },
+      { neighbor: 'root', bonus: 0.4 },
+    ],
+  },
+  {
+    id: 'moss',
+    name: 'Torfmoos',
+    desc: 'Nur ab der sechsten Reihe. +100 % je Leuchtpilz und Schleimpilz, +30 % je Torfmoos.',
+    baseCost: 1_000_000,
+    costGrowth: 1.13,
+    baseProd: 9000,
+    minRow: 5,
+    unlockPoints: 4,
+    rules: [
+      { neighbor: 'glow', bonus: 1 },
+      { neighbor: 'slime', bonus: 1 },
+      { neighbor: 'moss', bonus: 0.3 },
+    ],
   },
 ]
 

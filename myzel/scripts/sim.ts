@@ -16,6 +16,7 @@ import {
   buyHumusUpgrade,
   buyPig,
   buySporeUpgrade,
+  buyWeb,
   buyUpgrade,
   canBuyPig,
   claimCell,
@@ -61,6 +62,7 @@ const DAYS = Number(process.argv[3] ?? 3)
 /** Der Spieler beginnt seinen ersten Tag zu Beginn der ersten Sitzung. */
 const START_HOUR = persona.sessions[0][0]
 const SPORE_ORDER = ['dense', 'germ', 'bloom', 'harvest']
+const WEB_ORDER = ['link-1', 'scent', 'fine-roots', 'link-2', 'deep-decay', 'warning', 'far-flight', 'mantle', 'closed-net']
 const HUMUS_ORDER = ['seed', 'cheap', 'web', 'sniff', 'scent', 'sleep']
 
 let seed = 987654
@@ -187,6 +189,7 @@ while (t < end) {
     runPlayed++
     if (t >= nextCheck) {
       shop(s, cps)
+      for (const id of WEB_ORDER) buyWeb(s, id)
       for (const id of SPORE_ORDER) while (buySporeUpgrade(s, id));
       nextCheck = t + persona.check * (0.6 + rand() * 0.8)
     }
@@ -227,4 +230,4 @@ while (t < end) {
 }
 
 console.log(`\n${persona.name}, ${DAYS} Tage: ${s.autumns} Herbste, gespielt ${fmtTime(played)}, Trüffel ${s.trufflesFound}`)
-console.log(`Humus ${s.totalHumus}, Humus-Stufen ${JSON.stringify(s.humusLevels)}, Sporen-Stufen ${JSON.stringify(s.sporeLevels)}, Schweine ${s.pigs}`)
+console.log(`Humus ${s.totalHumus}, Humus-Stufen ${JSON.stringify(s.humusLevels)}, Sporen-Stufen ${JSON.stringify(s.sporeLevels)}, Netz ${s.web.length}/9, Schweine ${s.pigs}`)

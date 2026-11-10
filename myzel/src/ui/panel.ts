@@ -3,6 +3,7 @@ import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
 import { HUMUS_DIVISOR, HUMUS_UPGRADES, humusMultiplier } from '../game/prestige.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
+import { WEB_BRANCHES, WEB_NODES, connectedTrees, getWebNode, webRequirementsMet } from '../game/web.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
 import type { Tool } from './tooltip.ts'
 import { formatNumber } from '../game/format.ts'
@@ -12,6 +13,7 @@ import {
   canBuyHumusUpgrade,
   canBuyPig,
   canBuySporeUpgrade,
+  canBuyWeb,
   canBuyUpgrade,
   canPrestige,
   clickValue,
@@ -34,6 +36,7 @@ export interface PanelActions {
   prestige: () => void
   buyHumus: (id: string) => void
   buySpore: (id: string) => void
+  buyWeb: (id: string) => void
   buyBuilding: (id: string) => void
   buyUpgrade: (id: string) => void
   save: () => void
@@ -92,6 +95,9 @@ export class Panel {
   private buffBox: HTMLElement
   private humusRows: HumusRow[] = []
   private sporeRows: HumusRow[] = []
+  private webRows: Array<{ id: string; button: HTMLButtonElement; cost: HTMLElement; desc: HTMLElement; state: HTMLElement }> = []
+  private webTab: HTMLButtonElement
+  private webSummary: HTMLElement
   private sporeStat: HTMLElement
   private sporeValue: HTMLElement
   private sporeRate: HTMLElement
@@ -141,6 +147,7 @@ export class Panel {
         <button class="tab" role="tab" data-tab="growth">Wachstum</button>
         <button class="tab" role="tab" data-tab="nodes">Knoten</button>
         <button class="tab" role="tab" data-tab="upgrades">Upgrades<span class="badge zero" data-badge>0</span></button>
+        <button class="tab" role="tab" data-tab="web" data-web-tab hidden>Netz</button>
         <button class="tab" role="tab" data-tab="autumn">Herbst<span class="badge leaf" data-a-badge hidden>!</span></button>
         <button class="tab" role="tab" data-tab="system">Menü</button>
       </nav>
@@ -164,6 +171,11 @@ export class Panel {
             <p class="hint small">Fruchtkörper und Fruchtknoten streuen Sporen. Sie bleiben auch nach dem Herbst erhalten.</p>
             <div class="list" data-spore-list></div>
           </div>
+        </section>
+        <section data-pane="web" hidden>
+          <p class="hint small">Das Wood Wide Web verbindet die Bäume. Erforsche es mit Sporen. Die Forschung bleibt auch nach dem Herbst erhalten.</p>
+          <div class="web-summary" data-web-summary></div>
+          <div data-web-list></div>
         </section>
         <section data-pane="autumn" hidden>
           <div class="autumn-card">
@@ -193,6 +205,8 @@ export class Panel {
     this.nutrients = q('[data-nutrients]')
     this.perSecond = q('[data-pps]')
     this.perClick = q('[data-ppc]')
+    this.webTab = q('[data-web-tab]')
+    this.webSummary = q('[data-web-summary]')
     this.sporeStat = q('[data-spores]')
     this.sporeValue = q('[data-spore-value]')
     this.sporeRate = q('[data-spore-rate]')
@@ -249,6 +263,36 @@ export class Panel {
         cost: button.querySelector<HTMLElement>('[data-cost]')!,
         desc: button.querySelector<HTMLElement>('[data-desc]')!,
       })
+    }
+
+    const webList = q('[data-web-list]')
+    for (const branch of WEB_BRANCHES) {
+      const head = document.createElement('h2')
+      head.className = 'subhead'
+      head.textContent = branch.name
+      const hint = document.createElement('p')
+      hint.className = 'hint small'
+      hint.textContent = branch.desc
+      const list = document.createElement('div')
+      list.className = 'list'
+      for (const def of WEB_NODES.filter((n) => n.branch === branch.id)) {
+        const button = document.createElement('button')
+        button.className = 'item web-item'
+        button.innerHTML = `
+          <span class="row"><span class="name">${def.name}</span><span class="count" data-state></span></span>
+          <span class="row sub"><span data-cost></span></span>
+          <span class="desc">${def.desc}</span>`
+        button.addEventListener('click', () => this.actions.buyWeb(def.id))
+        list.appendChild(button)
+        this.webRows.push({
+          id: def.id,
+          button,
+          cost: button.querySelector<HTMLElement>('[data-cost]')!,
+          desc: button.querySelector<HTMLElement>('.desc')!,
+          state: button.querySelector<HTMLElement>('[data-state]')!,
+        })
+      }
+      webList.append(head, hint, list)
     }
 
     this.tabButtons = [...this.element.querySelectorAll<HTMLButtonElement>('[data-tab]')]
@@ -398,11 +442,35 @@ export class Panel {
       if (!button.disabled) affordable += 1
     }
     affordable += this.updateSpores(state)
+    affordable += this.updateWeb(state)
     this.badge.classList.toggle('zero', affordable === 0)
     this.badge.textContent = String(affordable)
     this.badge.title = `${affordable} Verbesserung${affordable === 1 ? '' : 'en'} kaufbar`
 
     this.updateAutumn(state)
+  }
+
+  /** Zeigt den Forschungsbaum; gibt die Zahl kaufbarer Forschungen zurück. */
+  private updateWeb(state: GameState): number {
+    const known = state.spores > 0 || sporesPerSecond(state) > 0 || state.web.length > 0
+    this.webTab.hidden = !known
+    if (!known) return 0
+    this.webSummary.textContent = `Verbundene Bäume: ${connectedTrees(state.web)} / 3 · Erforscht: ${state.web.length} / ${WEB_NODES.length}`
+    let affordable = 0
+    for (const row of this.webRows) {
+      const def = getWebNode(row.id)!
+      const done = state.web.includes(row.id)
+      const open = webRequirementsMet(state.web, def)
+      row.button.classList.toggle('done', done)
+      row.button.classList.toggle('locked', !done && !open)
+      row.state.textContent = done ? '✓' : open ? '' : '🔒'
+      if (done) row.cost.textContent = 'Erforscht'
+      else if (!open) row.cost.textContent = `Braucht: ${def.requires.filter((r) => !state.web.includes(r)).map((r) => getWebNode(r)!.name).join(', ')}`
+      else row.cost.textContent = `${formatNumber(def.cost)} Sporen`
+      row.button.disabled = !canBuyWeb(state, row.id)
+      if (!row.button.disabled) affordable += 1
+    }
+    return affordable
   }
 
   /** Zeigt Sporen und ihre Verbesserungen; gibt die Zahl kaufbarer Verbesserungen zurück. */

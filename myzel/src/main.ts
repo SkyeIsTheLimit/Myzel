@@ -16,6 +16,7 @@ import {
   buyHumusUpgrade,
   buyPig,
   buySporeUpgrade,
+  buyWeb,
   collectTruffle,
   growthScore,
   newState,
@@ -36,6 +37,7 @@ import { formatDuration, formatNumber } from './game/format.ts'
 import { GridView } from './render/grid.ts'
 import type { HoverInfo } from './render/grid.ts'
 import { WORLD_H, WORLD_W } from './render/sprites.ts'
+import { connectedTrees } from './game/web.ts'
 import { World } from './render/world.ts'
 import { Panel } from './ui/panel.ts'
 import { REMOVE_TOOL, cellTooltip } from './ui/tooltip.ts'
@@ -130,6 +132,7 @@ async function main(): Promise<void> {
     world.truffles.setPigs(state.pigs)
     world.truffles.lifetime = truffleLifetime(state)
     world.setAutumn(autumnProgress(state.totalNutrients))
+    world.setWebLinks(connectedTrees(state.web) - 1)
   }
 
   // Trüffel: zufällige Funde, Schweine verkürzen die Wartezeit.
@@ -216,6 +219,7 @@ async function main(): Promise<void> {
     buyPig: () => { if (buyPig(state)) refreshWorld() },
     buyHumus: (id) => { if (buyHumusUpgrade(state, id)) refreshAll() },
     buySpore: (id) => { buySporeUpgrade(state, id) },
+    buyWeb: (id) => { if (buyWeb(state, id)) refreshWorld() },
     prestige: () => {
       const gain = prestigeGain(state)
       if (gain < 1) return

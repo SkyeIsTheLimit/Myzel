@@ -8,7 +8,6 @@ import {
   INITIAL_CLAIMED,
   claimCostValue,
   claimStartCells,
-  gridProduction,
   isClaimable,
   isTreeCell,
   newGrid,
@@ -42,11 +41,13 @@ import {
   getSporeUpgrade,
   harvestMult,
 } from './spores.ts'
+import { WEB_NODES, getWebNode, webEffects, webRequirementsMet } from './web.ts'
+import type { WebEffects } from './web.ts'
 import type { BuffType } from './truffle.ts'
 import { formatNumber } from './format.ts'
 
 export const TICK_RATE = 10
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 /** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
 export const MAX_OFFLINE_SECONDS = 2 * 3600
 
@@ -73,6 +74,8 @@ export interface GameState {
   /** Sporen bleiben über den Herbst hinweg erhalten. */
   spores: number
   sporeLevels: Record<string, number>
+  /** Erforschte Knoten des Wood Wide Web; bleiben über den Herbst hinweg erhalten. */
+  web: string[]
   /** Unix-Zeit (ms) des letzten Speicherns, für den Offline-Fortschritt. */
   lastSaved: number
 }
@@ -105,6 +108,8 @@ export interface SaveData {
   /** Ab Version 5. */
   spores?: number
   sporeLevels?: Record<string, number>
+  /** Ab Version 6. */
+  web?: string[]
   lastSaved: number
 }
 
@@ -128,8 +133,14 @@ export function newState(now = Date.now()): GameState {
     autumns: 0,
     spores: 0,
     sporeLevels: {},
+    web: [],
     lastSaved: now,
   }
+}
+
+/** Wirkungen des Forschungsbaums (Wood Wide Web). */
+export function webFx(state: GameState): WebEffects {
+  return webEffects(state.web)
 }
 
 export function humusLevel(state: GameState, id: string): number {
@@ -151,7 +162,7 @@ export function offlineCap(state: GameState): number {
 
 /** Multiplikator auf die Trüffel-Fundrate aus Humus-Verbesserungen. */
 export function truffleBonus(state: GameState): number {
-  return truffleRateBonus(humusLevel(state, 'sniff'))
+  return truffleRateBonus(humusLevel(state, 'sniff')) * webFx(state).truffleRate
 }
 
 /** Gesamte Fundrate: Schweine mal Humus-Bonus. */
@@ -160,7 +171,7 @@ export function truffleRate(state: GameState): number {
 }
 
 export function truffleLifetime(state: GameState): number {
-  return TRUFFLE_LIFETIME + truffleLifetimeBonus(humusLevel(state, 'scent'))
+  return TRUFFLE_LIFETIME + truffleLifetimeBonus(humusLevel(state, 'scent')) + webFx(state).truffleLifetime
 }
 
 export function buildingCost(def: BuildingDef, owned: number): Decimal {
@@ -179,7 +190,10 @@ function upgradeMult(state: GameState, match: (u: UpgradeDef) => boolean): numbe
 /** Produktion eines einzelnen Gebäudes inklusive Gebäude-Upgrades. */
 export function unitProduction(state: GameState, def: BuildingDef): Decimal {
   const mult = upgradeMult(state, (u) => u.effect.type === 'building' && u.effect.target === def.id)
-  return new Decimal(def.baseProd).mul(mult).mul(sporeBuildingMult(state, def.id))
+  return new Decimal(def.baseProd)
+    .mul(mult)
+    .mul(sporeBuildingMult(state, def.id))
+    .mul(webFx(state).buildingMult[def.id] ?? 1)
 }
 
 /** Sporen-Verbesserungen, die einzelne Gebäude vervielfachen. */
@@ -189,15 +203,16 @@ function sporeBuildingMult(state: GameState, id: string): number {
   return 1
 }
 
-/** Gitterproduktion; Fruchtknoten bekommen zusätzlich „Blütenpracht“. */
+/** Gitterproduktion; Fruchtknoten bekommen „Blütenpracht“, einzelne Knotentypen die Forschung des Wood Wide Web. */
 function gridProductionWithSpores(state: GameState): number {
-  let sum = gridProduction(state.grid)
   const bloom = bloomMult(sporeLevel(state, 'bloom'))
-  if (bloom !== 1) {
-    state.grid.nodes.forEach((id, i) => {
-      if (id === 'fruit') sum += nodeBreakdown(state.grid.nodes, i, id).production * (bloom - 1)
-    })
-  }
+  const fx = webFx(state)
+  let sum = 0
+  state.grid.nodes.forEach((id, i) => {
+    if (!id) return
+    const mult = (fx.nodeMult[id] ?? 1) * (id === 'fruit' ? bloom : 1)
+    sum += nodeBreakdown(state.grid.nodes, i, id).production * mult
+  })
   return sum
 }
 
@@ -223,7 +238,7 @@ export function buffMult(state: GameState, type: BuffType): number {
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
   let sum = new Decimal(gridProductionWithSpores(state))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense')))
+  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global)
   return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
 }
 
@@ -231,7 +246,7 @@ export function productionPerSecond(state: GameState, withBuffs = true): Decimal
 export function sporesPerSecond(state: GameState): number {
   const nodes = state.grid.nodes.filter((n) => n === 'fruit').length
   const base = (state.buildings.fruiting ?? 0) * SPORES_PER_FRUITING + nodes * SPORES_PER_FRUIT_NODE
-  return base * harvestMult(sporeLevel(state, 'harvest'))
+  return base * harvestMult(sporeLevel(state, 'harvest')) * webFx(state).sporeMult
 }
 
 export function clickValue(state: GameState): Decimal {
@@ -300,7 +315,7 @@ export function removeNode(state: GameState, i: number): boolean {
 
 /** Zusatzproduktion pro Sekunde, wenn auf Feld `i` ein Knoten `id` gesetzt wird (inkl. globaler Multiplikatoren). */
 export function placementGainPerSecond(state: GameState, i: number, id: string): Decimal {
-  return new Decimal(placementGain(state.grid, i, id)).mul(globalMult(state))
+  return new Decimal(placementGain(state.grid, i, id)).mul(globalMult(state)).mul(webFx(state).nodeMult[id] ?? 1)
 }
 
 /** Preis des nächsten Gebäudes inklusive Humus-Rabatt „Sparsame Hyphen“. */
@@ -464,6 +479,18 @@ export function canBuySporeUpgrade(state: GameState, id: string): boolean {
   return level < def.costs.length && state.spores >= def.costs[level]
 }
 
+export function canBuyWeb(state: GameState, id: string): boolean {
+  const def = getWebNode(id)
+  return !!def && !state.web.includes(id) && webRequirementsMet(state.web, def) && state.spores >= def.cost
+}
+
+export function buyWeb(state: GameState, id: string): boolean {
+  if (!canBuyWeb(state, id)) return false
+  state.spores -= getWebNode(id)!.cost
+  state.web.push(id)
+  return true
+}
+
 export function buySporeUpgrade(state: GameState, id: string): boolean {
   if (!canBuySporeUpgrade(state, id)) return false
   const level = sporeLevel(state, id)
@@ -503,6 +530,7 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     autumns: state.autumns,
     spores: state.spores,
     sporeLevels: { ...state.sporeLevels },
+    web: [...state.web],
     lastSaved: now,
   }
 }
@@ -524,7 +552,7 @@ export function deserialize(data: unknown): GameState | null {
   if (typeof data !== 'object' || data === null) return null
   const d = data as Partial<SaveData>
   // Version 1 hatte noch kein Gitter; es wird dann mit den Startfeldern angelegt.
-  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== SAVE_VERSION) return null
+  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== 5 && d.version !== SAVE_VERSION) return null
   if (typeof d.nutrients !== 'string' || typeof d.totalNutrients !== 'string') return null
   const state = newState(typeof d.lastSaved === 'number' ? d.lastSaved : Date.now())
   state.nutrients = new Decimal(d.nutrients)
@@ -556,5 +584,6 @@ export function deserialize(data: unknown): GameState | null {
     const level = count(d.sporeLevels?.[def.id])
     if (level > 0) state.sporeLevels[def.id] = Math.min(level, def.costs.length)
   }
+  state.web = Array.isArray(d.web) ? WEB_NODES.map((n) => n.id).filter((id) => d.web!.includes(id)) : []
   return state
 }

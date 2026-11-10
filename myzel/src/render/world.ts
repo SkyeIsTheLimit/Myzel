@@ -3,6 +3,7 @@ import type { Application, FederatedPointerEvent } from 'pixi.js'
 import { TREE_COLS } from '../game/grid.ts'
 import { Forest } from './forest.ts'
 import { TruffleLayer } from './truffles.ts'
+import { GRID_TOP } from './grid.ts'
 import { generateHyphae, generateRoots, rootThickness } from './hyphae.ts'
 import type { HyphaPoint } from './hyphae.ts'
 import {
@@ -97,6 +98,8 @@ export class World {
   private glowSprite: Sprite
   private flows: Flow[] = []
   private flowLayer = new Container()
+  private webLayer = new Graphics()
+  private webLinks = 0
   private spores: Spore[] = []
   private sporeLayer = new Container()
   private sporeAccum = 0
@@ -260,7 +263,7 @@ export class World {
     this.coreTex = toTexture(core.canvas)
     this.glowSprite = new Sprite(this.glowTex)
     this.glowSprite.blendMode = 'add'
-    this.stage.addChild(this.glowSprite, new Sprite(this.coreTex), this.gridLayer, this.truffles.container, this.flowLayer, this.sporeLayer)
+    this.stage.addChild(this.glowSprite, new Sprite(this.coreTex), this.webLayer, this.gridLayer, this.truffles.container, this.flowLayer, this.sporeLayer)
     this.reveal(6)
   }
 
@@ -273,6 +276,28 @@ export class World {
   setAutumn(progress: number): void {
     for (const t of this.autumnTrees) t.sprite.alpha = Math.max(0, Math.min(1, (progress - t.start) / 0.45))
     this.forest.setAutumn(progress)
+  }
+
+  /** Wood Wide Web: wie viele der Verbindungen zwischen den drei Bäumen leuchten (0 bis 2). */
+  setWebLinks(count: number): void {
+    this.webLinks = Math.max(0, Math.min(TREE_X.length - 1, count))
+    if (this.webLinks === 0) this.webLayer.clear()
+  }
+
+  private drawWeb(): void {
+    if (this.webLinks === 0) return
+    const g = this.webLayer
+    g.clear()
+    const y = GRID_TOP + 3
+    for (let l = 0; l < this.webLinks; l++) {
+      const x0 = TREE_X[l]
+      const x1 = TREE_X[l + 1]
+      for (let x = x0, i = 0; x < x1; x += 3, i++) {
+        const wave = 0.5 + 0.5 * Math.sin(this.time * 3 - i * 0.35)
+        const wob = Math.round(Math.sin(i * 0.5 + this.time) * 1)
+        g.rect(Math.round(x), y + wob, 2, 1).fill({ color: 0x7fe0a8, alpha: 0.25 + 0.6 * wave })
+      }
+    }
   }
 
   /** Blätterregen beim Einläuten des Herbstes. */
@@ -370,6 +395,7 @@ export class World {
     }
 
     this.forest.update(dtMs, light)
+    this.drawWeb()
     this.truffles.update(dtMs)
 
     // Klick-Animation des Totholzes

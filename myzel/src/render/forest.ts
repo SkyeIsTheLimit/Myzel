@@ -125,6 +125,7 @@ export class Forest {
   private leaves: Array<{ s: Sprite; vx: number; vy: number; phase: number; landY: number; fade: number }> = []
   private autumn = 0
   private rayBoost = 1
+  private rayDim = 1
   private burstTime = 0
   private leafAccum = 0
 
@@ -334,6 +335,11 @@ export class Forest {
     this.burstTime = 5
   }
 
+  /** Bei Regen schwächere Sonnenstrahlen: `dim` von 0 (kein Regen) bis 1 (voller Regen). */
+  setRainDim(dim: number): void {
+    this.rayDim = 1 - 0.9 * dim
+  }
+
   /** Meldet eine Baumkrone, aus der Laub fallen kann (Mittelpunkt und Breite in Weltpixeln). */
   addCrown(x: number, y: number, w: number): void {
     this.crowns.push({ x, y, w })
@@ -402,7 +408,7 @@ export class Forest {
     }
 
     for (const ray of this.rays) {
-      ray.g.alpha = Math.min(1, light * light * (0.45 + 0.55 * Math.sin(this.time * 0.35 + ray.phase)) * this.rayBoost)
+      ray.g.alpha = Math.min(1, light * light * (0.45 + 0.55 * Math.sin(this.time * 0.35 + ray.phase)) * this.rayBoost * this.rayDim)
     }
 
     const dark = (1 - light) * (1 - light)

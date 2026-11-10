@@ -528,8 +528,11 @@ export class World {
     this.prevPhase = phase
     const light = clamp01(0.5 + 1.1 * Math.sin(phase * Math.PI * 2))
 
+    const rain = this.weatherLayer.rainAmount
+    this.forest.setRainDim(rain)
     this.skyBands.forEach((band, i) => {
-      band.tint = lerpColor(COLORS.skyNight[i], COLORS.skyDay[i], light)
+      // Bei Regen wird der Himmel grau.
+      band.tint = lerpColor(lerpColor(COLORS.skyNight[i], COLORS.skyDay[i], light), lerpColor(0x161b27, 0x7e8795, light), rain * 0.8)
     })
     const night = 1 - light
     this.nightOverlay.alpha = night * 0.5
@@ -561,7 +564,7 @@ export class World {
       c.sprite.x += c.speed * dt
       if (c.sprite.x > WORLD_W + SIDE) c.sprite.x = -SIDE - 40
       c.sprite.x = Math.round(c.sprite.x)
-      c.sprite.tint = lerpColor(0x56668a, 0xffffff, light)
+      c.sprite.tint = lerpColor(lerpColor(0x56668a, 0xffffff, light), 0x7a8290, rain * 0.7)
     }
 
     this.forest.update(dtMs, light)

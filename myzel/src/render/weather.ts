@@ -1,6 +1,6 @@
 import { Container, Sprite, Texture } from 'pixi.js'
 import type { Season, WeatherId } from '../game/weather.ts'
-import { SURFACE_Y, WORLD_W } from './sprites.ts'
+import { SURFACE_Y, WORLD_W, buildCloudTexture } from './sprites.ts'
 
 /** Wie weit über das Spielfeld hinaus Wetter fällt (gleich wie Himmel und Wald in der Welt). */
 const SIDE = 384
@@ -49,6 +49,9 @@ export class WeatherLayer {
   private weather: WeatherId = 'clear'
   private season: Season | null = null
   private tintBase = 0
+  /** Grauer Schleier über Himmel und Wald, nur bei Regen. */
+  private rainShade = sprite(AREA_W, GROUND + 4 - TOP, 0x4a5568)
+  private rainClouds: Array<{ sprite: Sprite; speed: number }> = []
   /** Wie stark das aktuelle Wetter sichtbar ist (0 bis 1); blendet sanft ein und aus. */
   private intensity: Record<WeatherId, number> = { clear: 0, rain: 0, fog: 0, snow: 0 }
   private time = 0
@@ -64,6 +67,18 @@ export class WeatherLayer {
     this.tint.position.set(-SIDE, TOP)
     this.tint.alpha = 0
     this.container.addChild(this.tint)
+    this.rainShade.position.set(-SIDE, TOP)
+    this.rainShade.alpha = 0
+    this.container.addChild(this.rainShade)
+    // Dunkle, große Regenwolken: ziehen langsam, erscheinen nur bei Regen.
+    for (let i = 0; i < 22; i++) {
+      const cloud = new Sprite(buildCloudTexture(300 + (i % 5)))
+      cloud.scale.set(2.2 + this.rnd() * 1.4, 1.5 + this.rnd() * 0.8)
+      cloud.position.set(-SIDE + (i / 22) * AREA_W + this.rnd() * 30, -120 + this.rnd() * 112)
+      cloud.alpha = 0
+      this.container.addChild(cloud)
+      this.rainClouds.push({ sprite: cloud, speed: 2 + this.rnd() * 3 })
+    }
 
     for (let x = -SIDE; x < WORLD_W + SIDE; x += 3) {
       const h = 2 + Math.floor(this.rnd() * 2)
@@ -104,7 +119,7 @@ export class WeatherLayer {
         radius: 10 + this.rnd() * 22,
       })
     }
-    this.fillParticles(this.rain, 420, 0xbfd8ff, 1, 4, () => ({ vx: -14, vy: 130 + this.rnd() * 40 }))
+    this.fillParticles(this.rain, 760, 0xe0ecff, 1, 6, () => ({ vx: -20, vy: 150 + this.rnd() * 60 }))
     this.fillParticles(this.snow, 320, 0xffffff, 2, 2, () => ({ vx: 0, vy: 14 + this.rnd() * 10 }))
     this.fillParticles(this.petals, 130, 0xffb6d0, 2, 1, () => ({ vx: 6 + this.rnd() * 6, vy: 8 + this.rnd() * 6 }))
   }
@@ -118,6 +133,11 @@ export class WeatherLayer {
       this.container.addChild(s)
       list.push({ sprite: s, ...speed(), phase: this.rnd() * 6 })
     }
+  }
+
+  /** Wie stark es gerade regnet, 0 bis 1 (blendet sanft ein und aus). */
+  get rainAmount(): number {
+    return this.intensity.rain
   }
 
   setWeather(weather: WeatherId): void {
@@ -167,6 +187,17 @@ export class WeatherLayer {
       b.body.scale.x = 1.3 * (0.35 + 0.65 * Math.abs(Math.sin(this.time * 9 + b.phase)))
       b.body.alpha = flutter
     })
+
+    // Regen: grauer Schleier und dunkle Wolken, die sanft ein- und ausblenden.
+    const rainAmount = this.intensity.rain
+    this.rainShade.alpha = rainAmount * 0.3 * (0.35 + 0.65 * light)
+    const cloudColor = light > 0.5 ? 0x6d7686 : 0x2b3244
+    for (const c of this.rainClouds) {
+      c.sprite.x += c.speed * dt
+      if (c.sprite.x > WORLD_W + SIDE) c.sprite.x = -SIDE - 80
+      c.sprite.tint = cloudColor
+      c.sprite.alpha = rainAmount * 0.9
+    }
 
     this.move(this.rain, this.intensity.rain, dt, false)
     this.move(this.snow, this.intensity.snow, dt, true)

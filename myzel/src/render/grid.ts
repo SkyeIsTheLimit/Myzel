@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite } from 'pixi.js'
 import type { FederatedPointerEvent, Texture } from 'pixi.js'
-import { CELLS, GRID_COLS, GRID_ROWS, colOf, isClaimable, isTreeCell, rowOf } from '../game/grid.ts'
+import { CELLS, GRID_COLS, GRID_ROWS, colOf, isClaimable, isTreeCell, neighbors, rowOf } from '../game/grid.ts'
 import type { GameState } from '../game/state.ts'
 import { SURFACE_Y, TILE, WORLD_W, buildGlowTexture, buildNodeTextures } from './sprites.ts'
 import type { NodeTextures } from './sprites.ts'
@@ -23,6 +23,10 @@ export class GridView {
   private textures: NodeTextures = buildNodeTextures()
   private glowTexture = buildGlowTexture()
   private overlay = new Graphics()
+  /** Hyphenfäden zwischen den erschlossenen Feldern. */
+  private threads = new Graphics()
+  private dots = new Graphics()
+  private activeLinks: Array<{ ax: number; ay: number; bx: number; by: number; phase: number }> = []
   private nodeLayer = new Container()
   private highlight = new Graphics()
   private ghost = new Sprite()
@@ -35,7 +39,7 @@ export class GridView {
     this.container.cursor = 'pointer'
     this.ghost.alpha = 0.6
     this.ghost.visible = false
-    this.container.addChild(this.overlay, this.nodeLayer, this.ghost, this.highlight)
+    this.container.addChild(this.overlay, this.threads, this.nodeLayer, this.dots, this.ghost, this.highlight)
 
     const cellAt = (e: FederatedPointerEvent): number => {
       // Lokale Koordinaten, weil die Welt im Canvas verschoben sein kann.
@@ -62,6 +66,7 @@ export class GridView {
     this.overlay.clear()
     this.nodeLayer.removeChildren().forEach((c) => c.destroy())
     this.pulses = []
+    this.drawThreads(state)
 
     for (let i = 0; i < CELLS; i++) {
       const x = colOf(i) * TILE
@@ -89,6 +94,37 @@ export class GridView {
     }
   }
 
+  /**
+   * Zeichnet Hyphenfäden zwischen allen erschlossenen Nachbarfeldern (und den Baumwurzeln). Zwischen Feldern mit
+   * Knoten leuchten sie und Nährstoffe wandern darüber; so hängt das ganze Gitter sichtbar am Geflecht.
+   */
+  private drawThreads(state: GameState): void {
+    const { grid } = state
+    this.threads.clear()
+    this.activeLinks = []
+    const live = (i: number): boolean => isTreeCell(i) || grid.claimed[i]
+    const center = (i: number): [number, number] => [colOf(i) * TILE + TILE / 2, GRID_TOP + rowOf(i) * TILE + TILE / 2]
+    for (let a = 0; a < CELLS; a++) {
+      if (!live(a)) continue
+      for (const b of neighbors(a)) {
+        if (b < a || !live(b)) continue
+        if (isTreeCell(a) && isTreeCell(b)) continue
+        const [ax, ay] = center(a)
+        const [bx, by] = center(b)
+        const active = (isTreeCell(a) || grid.nodes[a] !== null) && (isTreeCell(b) || grid.nodes[b] !== null)
+        // Leichter Bogen, damit die Fäden nicht wie ein Raster aussehen.
+        const bend = (((a * 7 + b * 13) % 5) - 2) * 0.7
+        const mx = (ax + bx) / 2 + (ay === by ? 0 : bend)
+        const my = (ay + by) / 2 + (ay === by ? bend : 0)
+        this.threads
+          .moveTo(ax, ay)
+          .quadraticCurveTo(mx, my, bx, by)
+          .stroke({ width: 1, color: active ? 0x9fe8c8 : 0xd9c79d, alpha: active ? 0.55 : 0.16 })
+        if (active) this.activeLinks.push({ ax, ay, bx, by, phase: ((a * 31 + b * 17) % 100) / 100 })
+      }
+    }
+  }
+
   /** Hebt ein Feld hervor; `ghostType` zeigt eine Vorschau des Knotens, der gesetzt würde. */
   setHighlight(index: number | null, valid: boolean, ghostType: string | null): void {
     this.highlight.clear()
@@ -107,6 +143,11 @@ export class GridView {
 
   update(dtMs: number): void {
     this.time += dtMs / 1000
+    this.dots.clear()
+    for (const l of this.activeLinks) {
+      const f = (this.time * 0.45 + l.phase) % 1
+      this.dots.rect(l.ax + (l.bx - l.ax) * f - 0.5, l.ay + (l.by - l.ay) * f - 0.5, 1.5, 1.5).fill({ color: 0xf2ffd8, alpha: 0.9 })
+    }
     for (const p of this.pulses) p.sprite.alpha = 0.45 + 0.4 * Math.sin(this.time * 2.4 + p.phase)
   }
 }

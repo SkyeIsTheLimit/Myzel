@@ -64,7 +64,7 @@ Mischung aus Idle und aktivem Optimieren, Hobbyprojekt (Steam optional später).
 | 5 | Biosphäre | Planetare Ebene, Endgame |
 
 ## 6. Prestige-Ebenen
-- **Herbst (Layer 1):** Reset gegen **Humus**, einen permanenten Multiplikator. Früh und oft (ca. 20–30 Min).
+- **Laubfall (Layer 1, früher „Herbst“):** Reset gegen **Humus**, einen permanenten Multiplikator. Früh und oft (ca. 20–30 Min).
   Optisch: Laub fällt, Szene färbt sich um.
 - **Ökosystem (Layer 2):** Höhere Ebene. Mehr Gitterfelder, neue Knotentypen.
 - **Evolution (Layer 3):** Wahl einer Pilzart (Leuchtpilz, Parasit, Symbiont). Jede ändert die Regeln → Wiederspielwert.
@@ -107,7 +107,7 @@ src/
 | M1 | Kernschleife: Nährstoffe, Hyphen, Upgrades, Tick-Loop, Zahlenformat |
 | M2 | Querschnitts-Ansicht + Knoten-Gitter mit Nachbarboni |
 | M3 | Speichern, Offline-Fortschritt, Export/Import |
-| M4 | Prestige Layer 1 (Herbst) inkl. Animationen |
+| M4 | Prestige Layer 1 (Laubfall) inkl. Animationen |
 | M5 | Phasen 2–3, Forschungsbaum, Tag/Nacht, Jahreszeiten |
 | M6 | Tauri-Build für macOS und Windows, Release-Pipeline |
 | M7 | Layer 2–3, Pilzarten, Balancing, Feinschliff |

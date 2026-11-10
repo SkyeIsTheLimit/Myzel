@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js'
-import { SURFACE_Y, WORLD_W, buildCanopyTexture, buildHillTexture, buildPineTexture, buildPlantTextures, rng } from './sprites.ts'
+import { SURFACE_Y, WORLD_W, buildBareCanopyTexture, buildCanopyTexture, buildHillTexture, buildPineTexture, buildPlantTextures, rng } from './sprites.ts'
 import type { PinePalette, TrunkStyle } from './sprites.ts'
+import type { Season } from '../game/weather.ts'
 
 const MARGIN = 48
 
@@ -42,6 +43,27 @@ const AUTUMN_LEAF: PinePalette[] = [
   { light: '#e6b04a', mid: '#cf8434', dark: '#a05a28' },
   { light: '#dccb55', mid: '#b8a23f', dark: '#867430' },
 ]
+const FAR_AUTUMN: PinePalette[] = [
+  { light: '#e3cf9c', mid: '#d4b887', dark: '#bda279' },
+  { light: '#dcc3a0', mid: '#cba886', dark: '#b39274' },
+]
+/** Frühling: Kirschblüte und junges Laub. */
+const BLOSSOM: PinePalette[] = [
+  { light: '#ffd6e6', mid: '#f4a6c4', dark: '#d9789f' },
+  { light: '#fff0f4', mid: '#f6c8d8', dark: '#d9a0b8' },
+]
+const FRESH: PinePalette[] = [
+  { light: '#b4e86a', mid: '#8cd04a', dark: '#5ea638' },
+  { light: '#c8f080', mid: '#a0da58', dark: '#74b440' },
+]
+const FAR_SPRING: PinePalette[] = [
+  { light: '#f2d6e2', mid: '#e4bfd0', dark: '#cca5b8' },
+  { light: '#cfe6b0', mid: '#bcd69c', dark: '#a4be88' },
+]
+const BIRCH_SPRING: PinePalette = { light: '#cdf08c', mid: '#aadf66', dark: '#82bb4c' }
+const BIRCH_AUTUMN: PinePalette = { light: '#f3de80', mid: '#dcbc4e', dark: '#b4923a' }
+/** Tannen im Winter: bereift. */
+const SNOW_PINE: PinePalette = { light: '#e4f0ea', mid: '#b9d2c8', dark: '#8aa89f' }
 const BIRCH_LEAF: PinePalette = { light: '#b4dd7c', mid: '#8fc460', dark: '#68a048' }
 
 const OAK_TRUNK: TrunkStyle = { main: '#6b4a2b', dark: '#4a3220' }
@@ -51,6 +73,18 @@ const FAR_TRUNK: TrunkStyle = { main: '#8aa9a8', dark: '#738f93' }
 interface Kind {
   textures: Texture[]
   weight: number
+  /** Gleich viele Bilder wie `textures`; werden in der jeweiligen Jahreszeit statt der normalen gezeigt. */
+  autumn?: Texture[]
+  winter?: Texture[]
+  spring?: Texture[]
+}
+
+interface SeasonalTree {
+  sprite: Sprite
+  base: Texture
+  autumn?: Texture
+  winter?: Texture
+  spring?: Texture
 }
 
 /**
@@ -66,6 +100,9 @@ export class Forest {
   readonly fireflies = new Container()
 
   private layers: Layer[] = []
+  private seasonal: SeasonalTree[] = []
+  /** Zusätzliche Blumen auf dem Gras, nur im Frühling sichtbar. */
+  private springFlowers = new Container()
   private rays: Array<{ g: Graphics; phase: number }> = []
   private flies: Array<{ s: Sprite; x: number; y: number; phase: number; speed: number }> = []
   private random = rng(909)
@@ -101,10 +138,14 @@ export class Forest {
     const farKinds: Kind[] = [
       {
         textures: [0, 1, 2, 3, 4].map((i) => buildPineTexture(30 + i, 11 + (i % 3) * 3, 20 + i * 5, FAR_PINE[i % 2])),
+        winter: [0, 1, 2, 3, 4].map((i) => buildPineTexture(30 + i, 11 + (i % 3) * 3, 20 + i * 5, SNOW_PINE)),
         weight: 6,
       },
       {
         textures: [0, 1, 2].map((i) => buildCanopyTexture(40 + i, 17 + i * 3, 26 + i * 4, FAR_LEAF[i % 2], FAR_TRUNK)),
+        autumn: [0, 1, 2].map((i) => buildCanopyTexture(40 + i, 17 + i * 3, 26 + i * 4, FAR_AUTUMN[i % 2], FAR_TRUNK)),
+        winter: [0, 1, 2].map((i) => buildBareCanopyTexture(40 + i, 17 + i * 3, 26 + i * 4, FAR_TRUNK)),
+        spring: [0, 1, 2].map((i) => buildCanopyTexture(40 + i, 17 + i * 3, 26 + i * 4, FAR_SPRING[i % 2], FAR_TRUNK)),
         weight: 3,
       },
     ]
@@ -128,26 +169,39 @@ export class Forest {
       // Tannen in vier Grüntönen und mehreren Größen
       {
         textures: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => buildPineTexture(60 + i, 19 + (i % 4) * 3, 38 + (i % 5) * 7, MID_PINE[i % 4])),
+        winter: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => buildPineTexture(60 + i, 19 + (i % 4) * 3, 38 + (i % 5) * 7, SNOW_PINE)),
         weight: 8,
       },
       // schlanke, hohe Fichten
       {
         textures: [0, 1].map((i) => buildPineTexture(80 + i, 13 + i * 2, 62 + i * 8, MID_PINE[3])),
+        winter: [0, 1].map((i) => buildPineTexture(80 + i, 13 + i * 2, 62 + i * 8, SNOW_PINE)),
         weight: 2,
       },
       // Laubbäume in Grün
       {
         textures: [0, 1, 2, 3, 4].map((i) => buildCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, MID_LEAF[i % 3], OAK_TRUNK)),
+        autumn: [0, 1, 2, 3, 4].map((i) => buildCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, AUTUMN_LEAF[i % 2], OAK_TRUNK)),
+        winter: [0, 1, 2, 3, 4].map((i) => buildBareCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, OAK_TRUNK)),
+        // Abwechselnd rosa Blüte und frisches Hellgrün.
+        spring: [0, 1, 2, 3, 4].map((i) =>
+          buildCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, i % 2 === 0 ? BLOSSOM[(i >> 1) % 2] : FRESH[(i >> 1) % 2], OAK_TRUNK),
+        ),
         weight: 5,
       },
       // einzelne Herbstbäume als Farbtupfer
       {
         textures: [0, 1, 2].map((i) => buildCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, AUTUMN_LEAF[i % 2], OAK_TRUNK)),
+        winter: [0, 1, 2].map((i) => buildBareCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, OAK_TRUNK)),
+        spring: [0, 1, 2].map((i) => buildCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, BLOSSOM[i % 2], OAK_TRUNK)),
         weight: 1,
       },
       // Birken
       {
         textures: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_LEAF, BIRCH_TRUNK)),
+        autumn: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_AUTUMN, BIRCH_TRUNK)),
+        winter: [0, 1, 2].map((i) => buildBareCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_TRUNK)),
+        spring: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_SPRING, BIRCH_TRUNK)),
         weight: 2,
       },
     ]
@@ -188,6 +242,18 @@ export class Forest {
       frontLayer.addChild(sprite)
     }
 
+    // Frühlingsblumen: dichte, bunte Tupfer zwischen dem übrigen Bewuchs.
+    this.springFlowers.visible = false
+    frontLayer.addChild(this.springFlowers)
+    for (let fx = left; fx < left + span; fx += 3 + this.random() * 7) {
+      if (fx > 108 && fx < 156) continue
+      const flower = new Sprite(plants.flowers[Math.floor(this.random() * plants.flowers.length)])
+      flower.anchor.set(0.5, 1)
+      flower.position.set(Math.round(fx), SURFACE_Y + 3 + Math.floor(this.random() * 4))
+      if (this.random() < 0.5) flower.scale.x = -1
+      this.springFlowers.addChild(flower)
+    }
+
     this.front.addChild(this.leafLayer)
 
     // Glühwürmchen
@@ -206,6 +272,15 @@ export class Forest {
         speed: 0.3 + this.random() * 0.5,
       })
     }
+  }
+
+  /** Tauscht die Hintergrundbäume gegen ihre Herbst- oder Winterbilder (Tannen bekommen im Winter Frost). */
+  setSeason(season: Season | null): void {
+    for (const t of this.seasonal) {
+      const tex = season === 'autumn' ? t.autumn : season === 'winter' ? t.winter : season === 'spring' ? t.spring : undefined
+      t.sprite.texture = tex ?? t.base
+    }
+    this.springFlowers.visible = season === 'spring'
   }
 
   /** Herbst-Fortschritt 0 bis 1; ab etwa 0.3 fallen vereinzelt Blätter. */
@@ -294,7 +369,11 @@ export class Forest {
       x += this.random() < 0.2 ? 2 + this.random() * 4 : minGap + this.random() * (maxGap - minGap)
       let pick = this.random() * total
       const kind = kinds.find((k) => (pick -= k.weight) < 0) ?? kinds[0]
-      const sprite = new Sprite(kind.textures[Math.floor(this.random() * kind.textures.length)])
+      const index = Math.floor(this.random() * kind.textures.length)
+      const sprite = new Sprite(kind.textures[index])
+      if (kind.autumn || kind.winter || kind.spring) {
+        this.seasonal.push({ sprite, base: kind.textures[index], autumn: kind.autumn?.[index], winter: kind.winter?.[index], spring: kind.spring?.[index] })
+      }
       sprite.anchor.set(0.5, 1)
       // Der Fuß liegt unter der Grasreihe, die ihn verdeckt: keine Lücke zwischen Stamm und Boden.
       sprite.position.set(Math.round(x), SURFACE_Y + 5 + Math.floor(this.random() * 4))

@@ -3,7 +3,7 @@
 //
 // Der Spieler ist nicht immer da (Spielsitzungen, dazwischen läuft nur die Offline-Produktion bis zur Obergrenze),
 // schaut nur alle paar Sekunden in den Shop, macht manchmal Fehlkäufe, verpasst Trüffel und klickt mit der Zeit
-// weniger. Den Herbst läutet er ein, wenn der Fortschritt stockt oder sich der Humus mindestens verdoppeln würde.
+// weniger. Den Laubfall läutet er ein, wenn der Fortschritt stockt oder sich der Humus mindestens verdoppeln würde.
 import Decimal from 'break_infinity.js'
 import { BUILDINGS, NODES, UPGRADES } from '../src/game/data.ts'
 import { CELLS, canPlaceAt, isClaimable } from '../src/game/grid.ts'
@@ -211,12 +211,12 @@ while (t < end) {
     markIdx++
   }
 
-  // Herbst: nur in einer Sitzung, wenn der Fortschritt stockt oder sich der Humus verdoppeln würde.
+  // Laubfall: nur in einer Sitzung, wenn der Fortschritt stockt oder sich der Humus verdoppeln würde.
   const gain = prestigeGain(s)
   if (present && gain >= 1 && t === Math.floor(nextCheck - persona.check * 0.5)) {
     const stalled = waitForBest(s, options(s, 0)) > 900
     if (gain >= Math.max(10, s.totalHumus) || (stalled && gain >= Math.max(3, s.totalHumus * 0.5))) {
-      console.log(`Herbst ${s.autumns + 1}: Tag ${(t / 86400).toFixed(1)}, Durchgang ${fmtTime(t - runStart)} (gespielt ${fmtTime(runPlayed)}), +${gain} Humus → ${s.totalHumus + gain}, Sporen ${s.spores.toFixed(0)}`)
+      console.log(`Laubfall ${s.autumns + 1}: Tag ${(t / 86400).toFixed(1)}, Durchgang ${fmtTime(t - runStart)} (gespielt ${fmtTime(runPlayed)}), +${gain} Humus → ${s.totalHumus + gain}, Sporen ${s.spores.toFixed(0)}`)
       if (timeline.length) console.log(timeline.join('\n'))
       prestige(s)
       for (const id of HUMUS_ORDER) while (buyHumusUpgrade(s, id));
@@ -229,5 +229,5 @@ while (t < end) {
   t++
 }
 
-console.log(`\n${persona.name}, ${DAYS} Tage: ${s.autumns} Herbste, gespielt ${fmtTime(played)}, Trüffel ${s.trufflesFound}`)
+console.log(`\n${persona.name}, ${DAYS} Tage: ${s.autumns} Laubfälle, gespielt ${fmtTime(played)}, Trüffel ${s.trufflesFound}`)
 console.log(`Humus ${s.totalHumus}, Humus-Stufen ${JSON.stringify(s.humusLevels)}, Sporen-Stufen ${JSON.stringify(s.sporeLevels)}, Netz ${s.web.length}/9, Schweine ${s.pigs}`)

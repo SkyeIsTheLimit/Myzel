@@ -39,6 +39,8 @@ import { GridView } from './render/grid.ts'
 import type { HoverInfo } from './render/grid.ts'
 import { WORLD_H, WORLD_W } from './render/sprites.ts'
 import { connectedTrees } from './game/web.ts'
+import { pickWeather, seasonAt, weatherDuration } from './game/weather.ts'
+import type { Environment, Season, WeatherId } from './game/weather.ts'
 import { World } from './render/world.ts'
 import { askConfirm, askText, showText } from './ui/dialog.ts'
 import { Panel } from './ui/panel.ts'
@@ -138,6 +140,20 @@ async function main(): Promise<void> {
   }
 
   // Trüffel: zufällige Funde, Schweine verkürzen die Wartezeit.
+  // Jahreszeit nach Kalender, Wetter wechselt zufällig; beides gilt für den jeweils aktuellen Spielstand.
+  const env: Environment = { season: seasonAt(Date.now()), weather: 'clear' }
+  /** Gesetzt, wenn die Jahreszeit per Dev-Zugang festgehalten wird. */
+  let seasonLocked = false
+  let weatherLeft = 20 + Math.random() * 40
+  const applyEnv = (): void => {
+    state.env = env
+    world.weatherLayer.setSeason(env.season)
+    world.setSeason(env.season)
+    world.weatherLayer.setWeather(env.weather)
+  }
+  env.weather = pickWeather(env.season!, Math.random())
+  applyEnv()
+
   let truffleTimer = TRUFFLE_FIRST_MIN + Math.random() * (TRUFFLE_FIRST_MAX - TRUFFLE_FIRST_MIN)
   world.truffles.onCollect = (x, y) => {
     const result = collectTruffle(state, Math.random())
@@ -227,9 +243,9 @@ async function main(): Promise<void> {
       if (gain < 1) return
       const bonus = Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)
       const ok = await askConfirm(
-        `Herbst einläuten?\n\nDu erhältst ${gain} Humus (+${bonus} % Produktion dauerhaft).\n` +
+        `Laubfall einläuten?\n\nDu erhältst ${gain} Humus (+${bonus} % Produktion dauerhaft).\n` +
           'Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt.\nHumus, Schweine und Fundzähler bleiben.',
-        'Herbst einläuten',
+        'Laubfall einläuten',
       )
       if (!ok) return
       startAutumn(state)
@@ -237,7 +253,7 @@ async function main(): Promise<void> {
       world.leafBurst()
       refreshAll()
       saveGame(state)
-      showToast(`Der Herbst ist da! +${gain} Humus`, 6000)
+      showToast(`Der Laubfall hat begonnen! +${gain} Humus`, 6000)
     },
     save: () => { saveGame(state); showToast('Gespeichert.', 1500) },
     exportSave: async () => {
@@ -282,6 +298,20 @@ async function main(): Promise<void> {
   let sinceSave = 0
   app.ticker.add((ticker) => {
     const dtMs = ticker.deltaMS
+    state.env = env
+    weatherLeft -= Math.min(ticker.deltaMS / 1000, 1)
+    const season = seasonAt(Date.now())
+    if (!seasonLocked && season !== env.season) {
+      env.season = season
+      env.weather = pickWeather(season, Math.random())
+      weatherLeft = weatherDuration(Math.random())
+      applyEnv()
+    }
+    if (weatherLeft <= 0) {
+      env.weather = pickWeather(env.season!, Math.random())
+      weatherLeft = weatherDuration(Math.random())
+      applyEnv()
+    }
     const dt = dtMs / 1000
     if (dt > 1) {
       // Tab war im Hintergrund: wie Offline-Zeit behandeln.
@@ -322,7 +352,7 @@ async function main(): Promise<void> {
 
   if (import.meta.env.DEV) {
     // Nur im Dev-Modus: Zugriff auf den Spielzustand für manuelle Tests.
-    Object.defineProperty(window, '__game', { get: () => ({ state, refreshAll, world, spawnTruffle: () => world.truffles.spawn() }) })
+    Object.defineProperty(window, '__game', { get: () => ({ state, refreshAll, world, setEnv: (season: Season, weather: WeatherId) => { env.season = season; env.weather = weather; weatherLeft = 1e9; seasonLocked = true; applyEnv() }, spawnTruffle: () => world.truffles.spawn() }) })
   }
 }
 

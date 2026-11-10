@@ -3,6 +3,7 @@ import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
 import { HUMUS_DIVISOR, HUMUS_UPGRADES, humusMultiplier } from '../game/prestige.ts'
 import { ACHIEVEMENTS, ACHIEVEMENT_BONUS } from '../game/achievements.ts'
+import { SEASON_NAMES, WEATHERS, envEffects } from '../game/weather.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
 import { WEB_BRANCHES, WEB_NODES, connectedTrees, getWebNode, webRequirementsMet } from '../game/web.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
@@ -100,6 +101,8 @@ export class Panel {
   private webTab: HTMLButtonElement
   private achRows: Array<{ id: string; row: HTMLElement }> = []
   private achSummary: HTMLElement
+  private envBox: HTMLElement
+  private envKey = ''
   private webSummary: HTMLElement
   private sporeStat: HTMLElement
   private sporeValue: HTMLElement
@@ -144,6 +147,7 @@ export class Panel {
             <span class="spore-rate" data-spore-rate></span>
           </div>
         </section>
+        <div class="env" data-env hidden></div>
         <div class="buffs" data-buffs></div>
       </div>
       <nav class="tabs" role="tablist">
@@ -151,7 +155,7 @@ export class Panel {
         <button class="tab" role="tab" data-tab="nodes">Knoten</button>
         <button class="tab" role="tab" data-tab="upgrades">Upgrades<span class="badge zero" data-badge>0</span></button>
         <button class="tab" role="tab" data-tab="web" data-web-tab hidden>Netz</button>
-        <button class="tab" role="tab" data-tab="autumn">Herbst<span class="badge leaf" data-a-badge hidden>!</span></button>
+        <button class="tab" role="tab" data-tab="autumn">Laubfall<span class="badge leaf" data-a-badge hidden>!</span></button>
         <button class="tab" role="tab" data-tab="system">Menü</button>
       </nav>
       <div class="scroll">
@@ -171,24 +175,24 @@ export class Panel {
           <div class="list" data-upgrades></div>
           <div data-spore-section hidden>
             <h2 class="subhead">Sporenforschung</h2>
-            <p class="hint small">Fruchtkörper und Fruchtknoten streuen Sporen. Sie bleiben auch nach dem Herbst erhalten.</p>
+            <p class="hint small">Fruchtkörper und Fruchtknoten streuen Sporen. Sie bleiben auch nach dem Laubfall erhalten.</p>
             <div class="list" data-spore-list></div>
           </div>
         </section>
         <section data-pane="web" hidden>
-          <p class="hint small">Das Wood Wide Web verbindet die Bäume. Erforsche es mit Sporen. Die Forschung bleibt auch nach dem Herbst erhalten.</p>
+          <p class="hint small">Das Wood Wide Web verbindet die Bäume. Erforsche es mit Sporen. Die Forschung bleibt auch nach dem Laubfall erhalten.</p>
           <div class="web-summary" data-web-summary></div>
           <div data-web-list></div>
         </section>
         <section data-pane="autumn" hidden>
           <div class="autumn-card">
-            <div class="a-row"><span>Herbste</span><span data-a-count>0</span></div>
+            <div class="a-row"><span>Laubfälle</span><span data-a-count>0</span></div>
             <div class="a-row"><span>Humus</span><span class="humus" data-a-humus>0</span></div>
             <div class="a-row"><span>Produktionsbonus</span><span data-a-bonus>×1.00</span></div>
             <div class="a-row dim"><span>Gesammelt (Durchgang)</span><span data-a-run>0</span></div>
             <div class="a-row dim"><span>Gesammelt (gesamt)</span><span data-a-life>0</span></div>
           </div>
-          <button class="prestige" data-prestige>Herbst einläuten</button>
+          <button class="prestige" data-prestige>Laubfall einläuten</button>
           <p class="hint" data-a-hint></p>
           <h2 class="subhead">Humus-Verbesserungen</h2>
           <div class="list" data-humus-list></div>
@@ -212,6 +216,7 @@ export class Panel {
     this.nutrients = q('[data-nutrients]')
     this.perSecond = q('[data-pps]')
     this.perClick = q('[data-ppc]')
+    this.envBox = q('[data-env]')
     this.achSummary = q('[data-ach-summary]')
     const achList = q('[data-ach-list]')
     for (const def of ACHIEVEMENTS) {
@@ -465,6 +470,25 @@ export class Panel {
 
     this.updateAutumn(state)
     this.updateAchievements(state)
+    this.updateEnv(state)
+  }
+
+  /** Zeigt Jahreszeit und Wetter samt Wirkung. */
+  private updateEnv(state: GameState): void {
+    const { season, weather } = state.env
+    const key = `${season}|${weather}`
+    if (key === this.envKey) return
+    this.envKey = key
+    this.envBox.hidden = season === null
+    if (season === null) return
+    const w = WEATHERS.find((x) => x.id === weather)!
+    const fx = envEffects(state.env)
+    const pct = (m: number): string => `+${Math.round((m - 1) * 100)} %`
+    const effects = ([['Produktion', fx.production], ['Klick', fx.click], ['Trüffel', fx.truffle], ['Sporen', fx.spores]] as Array<[string, number]>)
+      .filter(([, m]) => m !== 1)
+      .map(([label, m]) => `${label} ${pct(m)}`)
+      .join(' · ')
+    this.envBox.innerHTML = `<span class="env-name">${SEASON_NAMES[season]} · ${w.name}</span><span class="env-fx">${effects}</span>`
   }
 
   private updateAchievements(state: GameState): void {
@@ -530,11 +554,11 @@ export class Panel {
 
     this.autumnBadge.hidden = gain < 1
     this.prestigeButton.disabled = !canPrestige(state)
-    this.prestigeButton.textContent = gain >= 1 ? `Herbst einläuten · +${gain} Humus` : 'Herbst einläuten'
+    this.prestigeButton.textContent = gain >= 1 ? `Laubfall einläuten · +${gain} Humus` : 'Laubfall einläuten'
     const next = formatNumber((gain + 1) * (gain + 1) * HUMUS_DIVISOR)
     this.autumnHint.textContent =
       gain >= 1
-        ? `Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt. Humus, Schweine und Fundzähler bleiben. Humus erhöht die Produktion dauerhaft (je mehr du hast, desto weniger bringt der einzelne). Dieser Herbst: +${Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)} %. Nächster Humus bei ${next} Nährstoffen.`
+        ? `Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt. Humus, Schweine und Fundzähler bleiben. Humus erhöht die Produktion dauerhaft (je mehr du hast, desto weniger bringt der einzelne). Dieser Laubfall: +${Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)} %. Nächster Humus bei ${next} Nährstoffen.`
         : `Sammle in diesem Durchgang ${formatNumber(HUMUS_DIVISOR)} Nährstoffe für den ersten Humus. Die Bäume färben sich schon herbstlich, je näher du kommst.`
 
     for (const row of this.humusRows) {

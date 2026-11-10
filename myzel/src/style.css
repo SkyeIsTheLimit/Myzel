@@ -326,7 +326,7 @@ footer { margin-top: 4px; }
 .item.pig { background: #4d3322; box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 4px #c98a7a; }
 .item.pig:hover:not(:disabled) { background: #5e3f2b; }
 
-/* --- Herbst / Prestige --- */
+/* --- Laubfall / Prestige --- */
 .tab { font-size: 10px; letter-spacing: 0; }
 .badge.leaf { color: #2a1204; background: #f2a93c; box-shadow: 0 0 0 2px var(--wood-dark); }
 
@@ -425,3 +425,19 @@ button.prestige:disabled { color: #8d7a58; background: #3a2616; box-shadow: inse
 .ach .ach-desc { font-size: 10px; line-height: 1.4; color: #a8946c; }
 .ach.done { opacity: 1; box-shadow: inset 0 0 0 2px #f2a93c; }
 .ach.done .ach-name::before { content: '★ '; color: #f2a93c; }
+
+/* --- Jahreszeit und Wetter --- */
+.env {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  font-size: 10px;
+  background: #1f2a33;
+  box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 0 3px #4d6b86;
+}
+.env[hidden] { display: none; }
+.env .env-name { color: #bfd8ff; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+.env .env-fx { color: #9fb4c8; text-align: right; line-height: 1.4; }

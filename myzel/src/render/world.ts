@@ -3,9 +3,11 @@ import type { Application, FederatedPointerEvent } from 'pixi.js'
 import { TREE_COLS } from '../game/grid.ts'
 import { Forest } from './forest.ts'
 import { TruffleLayer } from './truffles.ts'
+import { WeatherLayer } from './weather.ts'
 import { GRID_TOP } from './grid.ts'
 import { generateHyphae, generateRoots, rootThickness } from './hyphae.ts'
 import type { HyphaPoint } from './hyphae.ts'
+import type { Season } from '../game/weather.ts'
 import {
   COLORS,
   SURFACE_Y,
@@ -19,6 +21,9 @@ import {
   buildSoilTextures,
   buildSunTexture,
   AUTUMN_TREE,
+  BLOSSOM_TREE,
+  FRESH_TREE,
+  buildBareTreeTexture,
   buildTreeTexture,
   makeCanvas,
   rng,
@@ -87,7 +92,9 @@ export class World {
   private mushrooms: Sprite[] = []
   private forest = new Forest(SIDE, SKY_EXTRA)
   /** Herbst-Gegenstücke der Bäume; werden je nach Fortschritt eingeblendet. */
-  private autumnTrees: Array<{ sprite: Sprite; start: number }> = []
+  private autumnTrees: Array<{ sprite: Sprite; start: number; green: Sprite; bare: Sprite; spring: Sprite }> = []
+  private season: Season | null = null
+  private autumnProgress = 0
 
   private points: HyphaPoint[]
   private revealed = 0
@@ -98,6 +105,7 @@ export class World {
   private glowSprite: Sprite
   private flows: Flow[] = []
   private flowLayer = new Container()
+  readonly weatherLayer = new WeatherLayer()
   private webLayer = new Graphics()
   private webLinks = 0
   private spores: Spore[] = []
@@ -197,6 +205,9 @@ export class World {
     // Baumreihe über die ganze Breite: die drei Spielbäume plus Deko-Bäume im gleichen Abstand.
     const treeTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5))
     const autumnTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, AUTUMN_TREE))
+    const bareTextures = [0, 1, 2].map((i) => buildBareTreeTexture(30 + i * 7))
+    const springTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, BLOSSOM_TREE))
+    const freshTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, FRESH_TREE))
     const autumnRandom = rng(777)
     const spacing = TREE_X[1] - TREE_X[0]
     const extra = Math.ceil(SIDE / spacing)
@@ -213,7 +224,18 @@ export class World {
       autumn.alpha = 0
       this.stage.addChild(autumn)
       // Nicht alle Bäume färben sich gleichzeitig.
-      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55 })
+      const bare = new Sprite(bareTextures[((k % 3) + 3) % 3])
+      bare.anchor.set(0.5, 1)
+      bare.position.copyFrom(tree.position)
+      bare.alpha = 0
+      this.stage.addChild(bare)
+      // Im Frühling blüht ein Teil der Bäume rosa, der Rest trägt junges Hellgrün.
+      const spring = new Sprite(k % 2 === 0 ? springTextures[((k % 3) + 3) % 3] : freshTextures[((k % 3) + 3) % 3])
+      spring.anchor.set(0.5, 1)
+      spring.position.copyFrom(tree.position)
+      spring.visible = false
+      this.stage.addChild(spring)
+      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55, green: tree, bare, spring })
     }
 
     this.log = new Sprite(buildLogTexture())
@@ -252,6 +274,7 @@ export class World {
     this.nightOverlay.alpha = 0
     this.stage.addChild(this.nightOverlay)
     this.stage.addChild(this.forest.fireflies)
+    this.stage.addChild(this.weatherLayer.container)
 
     // Myzel
     this.points = generateHyphae(42, TREE_X, HYPHA_TOP, WORLD_W, WORLD_H, HYPHA_COUNT)
@@ -274,7 +297,27 @@ export class World {
 
   /** Herbst-Fortschritt 0 bis 1: Bäume färben sich um, Blätter fallen. */
   setAutumn(progress: number): void {
-    for (const t of this.autumnTrees) t.sprite.alpha = Math.max(0, Math.min(1, (progress - t.start) / 0.45))
+    this.autumnProgress = progress
+    this.applySeasonTrees()
+  }
+
+  /** Jahreszeit: im Herbst stehen alle Bäume in Herbstfarben, im Winter sind sie kahl. */
+  setSeason(season: Season | null): void {
+    this.season = season
+    this.forest.setSeason(season)
+    this.applySeasonTrees()
+  }
+
+  private applySeasonTrees(): void {
+    const winter = this.season === 'winter'
+    const progress = this.season === 'autumn' ? 1 : winter ? 0 : this.autumnProgress
+    for (const t of this.autumnTrees) {
+      t.sprite.alpha = Math.max(0, Math.min(1, (progress - t.start) / 0.45))
+      t.green.visible = !winter && this.season !== 'spring'
+      t.spring.visible = this.season === 'spring'
+      t.bare.alpha = winter ? 1 : 0
+      if (winter) t.sprite.alpha = 0
+    }
     this.forest.setAutumn(progress)
   }
 
@@ -395,6 +438,7 @@ export class World {
     }
 
     this.forest.update(dtMs, light)
+    this.weatherLayer.update(dtMs, light)
     this.drawWeb()
     this.truffles.update(dtMs)
 

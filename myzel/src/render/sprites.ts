@@ -127,6 +127,9 @@ export interface TreePalette {
 export const GREEN_TREE: TreePalette = { light: '#5fb054', mid: '#3f8f3a', dark: '#2d6a2e', edge: '#234f27' }
 export const AUTUMN_TREE: TreePalette = { light: '#f2c14e', mid: '#e08a2f', dark: '#b8561f', edge: '#7a3a14' }
 
+export const BLOSSOM_TREE: TreePalette = { light: '#ffdcea', mid: '#f2a2c2', dark: '#d4739c', edge: '#a8466f' }
+export const FRESH_TREE: TreePalette = { light: '#bdeb74', mid: '#8fd24c', dark: '#60a838', edge: '#3f7a2a' }
+
 export function buildTreeTexture(seed: number, palette: TreePalette = GREEN_TREE): Texture {
   const w = 48
   const h = 76
@@ -164,6 +167,45 @@ export function buildTreeTexture(seed: number, palette: TreePalette = GREEN_TREE
       px(ctx, x, y, color)
     }
   }
+  return toTexture(canvas)
+}
+
+/** Kahler Winterbaum: gleicher Stamm, statt der Krone Äste mit etwas Schnee. */
+export function buildBareTreeTexture(seed: number): Texture {
+  const w = 48
+  const h = 76
+  const { canvas, ctx } = makeCanvas(w, h)
+  const r = rng(seed)
+  for (let y = 34; y < h; y++) {
+    const flare = y > h - 5 ? (y - (h - 5)) : 0
+    const left = 20 - flare
+    const width = 8 + flare * 2
+    px(ctx, left, y, '#7d5833', width, 1)
+    px(ctx, left, y, '#6b4a2b', 2, 1)
+    px(ctx, left + width - 2, y, '#523620', 2, 1)
+    if (flare === 0) px(ctx, left, y, '#f4f8ff', 1, 1) // Schnee auf der Windseite
+  }
+  // Äste: vom Stammkopf aus fächerförmig nach oben und zur Seite.
+  const branch = (x: number, y: number, dir: number, len: number, depth: number): void => {
+    let fx = x
+    let fy = y
+    let a = dir
+    for (let i = 0; i < len; i++) {
+      a += (r() - 0.5) * 0.5
+      fx += Math.cos(a)
+      fy += Math.sin(a)
+      const ix = Math.round(fx)
+      const iy = Math.round(fy)
+      px(ctx, ix, iy, depth === 0 ? '#6b4a2b' : '#523620', depth === 0 ? 2 : 1, 1)
+      if (i % 3 === 1) px(ctx, ix, iy - 1, '#f4f8ff')
+      if (depth < 2 && r() < 0.18) branch(fx, fy, a + (r() < 0.5 ? -0.8 : 0.8), Math.floor(len * 0.6), depth + 1)
+    }
+  }
+  branch(24, 36, -Math.PI / 2, 22, 0)
+  branch(22, 38, -Math.PI / 2 - 0.9, 16, 0)
+  branch(26, 38, -Math.PI / 2 + 0.9, 16, 0)
+  branch(22, 44, -Math.PI + 0.5, 11, 1)
+  branch(26, 44, -0.5, 11, 1)
   return toTexture(canvas)
 }
 
@@ -362,6 +404,43 @@ export function buildCanopyTexture(seed: number, w: number, h: number, c: PinePa
       px(ctx, x, y, edge ? c.dark : color)
     }
   }
+  return toTexture(canvas)
+}
+
+/** Kahle Variante eines Laubbaums (gleiche Größe und Stamm wie `buildCanopyTexture`), mit Schnee auf den Ästen. */
+export function buildBareCanopyTexture(seed: number, w: number, h: number, trunk: TrunkStyle): Texture {
+  const { canvas, ctx } = makeCanvas(w, h)
+  const r = rng(seed)
+  const cx = (w - 1) / 2
+  const canopyH = Math.round(h * 0.64)
+  const trunkW = Math.max(2, Math.round(w / 9))
+  const trunkX = Math.floor(cx - trunkW / 2 + 0.5)
+  for (let y = Math.round(canopyH * 0.45); y < h; y++) {
+    const flare = y > h - 3 ? 1 : 0
+    px(ctx, trunkX - flare, y, trunk.main, trunkW + flare * 2, 1)
+    px(ctx, trunkX + trunkW - 1 + flare, y, trunk.dark, 1, 1)
+    if (trunk.mark && r() < 0.22) px(ctx, trunkX + Math.floor(r() * trunkW), y, trunk.mark)
+  }
+  const branch = (x: number, y: number, a: number, len: number, depth: number): void => {
+    let fx = x
+    let fy = y
+    for (let i = 0; i < len; i++) {
+      a += (r() - 0.5) * 0.5
+      fx += Math.cos(a)
+      fy += Math.sin(a)
+      const ix = Math.round(fx)
+      const iy = Math.round(fy)
+      if (ix < 0 || ix >= w || iy < 0) break
+      px(ctx, ix, iy, depth === 0 ? trunk.main : trunk.dark)
+      if (i % 3 === 1) px(ctx, ix, iy - 1, '#f4f8ff')
+      if (depth < 2 && r() < 0.2) branch(fx, fy, a + (r() < 0.5 ? -0.8 : 0.8), Math.floor(len * 0.6), depth + 1)
+    }
+  }
+  const baseY = canopyH * 0.7
+  const reach = Math.max(6, Math.round(canopyH * 0.6))
+  branch(cx, baseY, -Math.PI / 2, reach, 0)
+  branch(cx, baseY + 1, -Math.PI / 2 - 0.9, Math.round(reach * 0.8), 0)
+  branch(cx, baseY + 1, -Math.PI / 2 + 0.9, Math.round(reach * 0.8), 0)
   return toTexture(canvas)
 }
 

@@ -43,6 +43,8 @@ import {
 } from './spores.ts'
 import { ACHIEVEMENTS, achievementMult } from './achievements.ts'
 import type { AchievementDef } from './achievements.ts'
+import { NEUTRAL_ENV, envEffects } from './weather.ts'
+import type { Environment, EnvEffects } from './weather.ts'
 import { WEB_NODES, getWebNode, webEffects, webRequirementsMet } from './web.ts'
 import type { WebEffects } from './web.ts'
 import type { BuffType } from './truffle.ts'
@@ -80,6 +82,8 @@ export interface GameState {
   web: string[]
   /** Freigeschaltete Erfolge; jeder gibt einen kleinen dauerhaften Produktionsbonus. */
   achievements: string[]
+  /** Jahreszeit und Wetter; nur Laufzeit, wird nicht gespeichert. */
+  env: Environment
   /** Unix-Zeit (ms) des letzten Speicherns, für den Offline-Fortschritt. */
   lastSaved: number
 }
@@ -141,8 +145,14 @@ export function newState(now = Date.now()): GameState {
     sporeLevels: {},
     web: [],
     achievements: [],
+    env: { ...NEUTRAL_ENV },
     lastSaved: now,
   }
+}
+
+/** Wirkungen von Jahreszeit und Wetter. */
+export function envFx(state: GameState): EnvEffects {
+  return envEffects(state.env)
 }
 
 /** Wirkungen des Forschungsbaums (Wood Wide Web). */
@@ -169,7 +179,7 @@ export function offlineCap(state: GameState): number {
 
 /** Multiplikator auf die Trüffel-Fundrate aus Humus-Verbesserungen. */
 export function truffleBonus(state: GameState): number {
-  return truffleRateBonus(humusLevel(state, 'sniff')) * webFx(state).truffleRate
+  return truffleRateBonus(humusLevel(state, 'sniff')) * webFx(state).truffleRate * envFx(state).truffle
 }
 
 /** Gesamte Fundrate: Schweine mal Humus-Bonus. */
@@ -245,7 +255,7 @@ export function buffMult(state: GameState, type: BuffType): number {
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
   let sum = new Decimal(gridProductionWithSpores(state))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global).mul(achievementMult(state.achievements.length))
+  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global).mul(achievementMult(state.achievements.length)).mul(envFx(state).production)
   return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
 }
 
@@ -253,13 +263,13 @@ export function productionPerSecond(state: GameState, withBuffs = true): Decimal
 export function sporesPerSecond(state: GameState): number {
   const nodes = state.grid.nodes.filter((n) => n === 'fruit').length
   const base = (state.buildings.fruiting ?? 0) * SPORES_PER_FRUITING + nodes * SPORES_PER_FRUIT_NODE
-  return base * harvestMult(sporeLevel(state, 'harvest')) * webFx(state).sporeMult
+  return base * harvestMult(sporeLevel(state, 'harvest')) * webFx(state).sporeMult * envFx(state).spores
 }
 
 export function clickValue(state: GameState): Decimal {
   const mult = upgradeMult(state, (u) => u.effect.type === 'click')
   // Klicken skaliert leicht mit der Produktion, damit es auch später relevant bleibt.
-  return new Decimal(1).mul(mult).mul(humusMult(state)).add(productionPerSecond(state).mul(0.01)).mul(buffMult(state, 'click'))
+  return new Decimal(1).mul(mult).mul(humusMult(state)).add(productionPerSecond(state).mul(0.01)).mul(buffMult(state, 'click')).mul(envFx(state).click)
 }
 
 export function totalBuildings(state: GameState): number {

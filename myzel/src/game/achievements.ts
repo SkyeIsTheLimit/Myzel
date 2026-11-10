@@ -29,8 +29,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'truffle-100', name: 'Trüffelkönig', desc: '100 Trüffel gefunden.', test: (s) => s.trufflesFound >= 100 },
   { id: 'pig-1', name: 'Rüsselfreund', desc: 'Das erste Trüffelschwein kaufen.', test: (s) => s.pigs >= 1 },
   { id: 'pig-5', name: 'Schweinebande', desc: 'Fünf Trüffelschweine besitzen.', test: (s) => s.pigs >= 5 },
-  { id: 'autumn-1', name: 'Blätterfall', desc: 'Den ersten Herbst einläuten.', test: (s) => s.autumns >= 1 },
-  { id: 'autumn-5', name: 'Kreislauf', desc: 'Fünf Herbste einläuten.', test: (s) => s.autumns >= 5 },
+  { id: 'autumn-1', name: 'Neuanfang', desc: 'Den ersten Laubfall einläuten.', test: (s) => s.autumns >= 1 },
+  { id: 'autumn-5', name: 'Kreislauf', desc: 'Fünf Laubfälle einläuten.', test: (s) => s.autumns >= 5 },
   { id: 'web-1', name: 'Erste Fäden gesponnen', desc: 'Die erste Forschung im Wood Wide Web.', test: (s) => s.web.length >= 1 },
   { id: 'web-all', name: 'Wood Wide Web', desc: 'Das ganze Netz erforschen.', test: (s) => s.web.length >= 9 },
 ]

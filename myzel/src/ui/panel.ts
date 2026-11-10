@@ -2,6 +2,7 @@ import { BUILDINGS, NODES, UPGRADES } from '../game/data.ts'
 import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
 import { HUMUS_BONUS, HUMUS_DIVISOR, HUMUS_UPGRADES } from '../game/prestige.ts'
+import { SPORE_UPGRADES } from '../game/spores.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
 import type { Tool } from './tooltip.ts'
 import { formatNumber } from '../game/format.ts'
@@ -10,6 +11,7 @@ import {
   canBuyBuilding,
   canBuyHumusUpgrade,
   canBuyPig,
+  canBuySporeUpgrade,
   canBuyUpgrade,
   canPrestige,
   clickValue,
@@ -19,6 +21,8 @@ import {
   nodeCost,
   prestigeGain,
   productionPerSecond,
+  sporeLevel,
+  sporesPerSecond,
   truffleRate,
   unitProduction,
 } from '../game/state.ts'
@@ -29,6 +33,7 @@ export interface PanelActions {
   buyPig: () => void
   prestige: () => void
   buyHumus: (id: string) => void
+  buySpore: (id: string) => void
   buyBuilding: (id: string) => void
   buyUpgrade: (id: string) => void
   save: () => void
@@ -86,6 +91,11 @@ export class Panel {
   private pigDesc: HTMLElement
   private buffBox: HTMLElement
   private humusRows: HumusRow[] = []
+  private sporeRows: HumusRow[] = []
+  private sporeStat: HTMLElement
+  private sporeValue: HTMLElement
+  private sporeRate: HTMLElement
+  private sporeSection: HTMLElement
   private autumnBadge: HTMLElement
   private prestigeButton: HTMLButtonElement
   private autumnHint: HTMLElement
@@ -109,13 +119,20 @@ export class Panel {
           <h1>MYZEL</h1>
         </header>
         <section class="stats">
-          <div class="stock">
-            <span class="big" data-nutrients>0</span>
-            <span class="label">Nährstoffe</span>
+          <div class="stats-main">
+            <div class="stock">
+              <span class="big" data-nutrients>0</span>
+              <span class="label">Nährstoffe</span>
+            </div>
+            <div class="rates">
+              <span class="rate main" data-pps>0 / Sek</span>
+              <span class="rate" data-ppc>+1 / Klick</span>
+            </div>
           </div>
-          <div class="rates">
-            <span class="rate main" data-pps>0 / Sek</span>
-            <span class="rate" data-ppc>+1 / Klick</span>
+          <div class="spore-stat" data-spores hidden>
+            <span class="spore-label">Sporen</span>
+            <span class="spore-value" data-spore-value></span>
+            <span class="spore-rate" data-spore-rate></span>
           </div>
         </section>
         <div class="buffs" data-buffs></div>
@@ -142,6 +159,11 @@ export class Panel {
         <section data-pane="upgrades" hidden>
           <p class="hint" data-upgrade-empty>Noch keine Verbesserungen verfügbar. Sammle weiter Nährstoffe.</p>
           <div class="list" data-upgrades></div>
+          <div data-spore-section hidden>
+            <h2 class="subhead">Sporenforschung</h2>
+            <p class="hint small">Fruchtkörper und Fruchtknoten streuen Sporen. Sie bleiben auch nach dem Herbst erhalten.</p>
+            <div class="list" data-spore-list></div>
+          </div>
         </section>
         <section data-pane="autumn" hidden>
           <div class="autumn-card">
@@ -171,6 +193,10 @@ export class Panel {
     this.nutrients = q('[data-nutrients]')
     this.perSecond = q('[data-pps]')
     this.perClick = q('[data-ppc]')
+    this.sporeStat = q('[data-spores]')
+    this.sporeValue = q('[data-spore-value]')
+    this.sporeRate = q('[data-spore-rate]')
+    this.sporeSection = q('[data-spore-section]')
     this.upgradeList = q('[data-upgrades]')
     this.buffBox = q('[data-buffs]')
     this.upgradeEmpty = q('[data-upgrade-empty]')
@@ -198,6 +224,25 @@ export class Panel {
       button.addEventListener('click', () => this.actions.buyHumus(def.id))
       humusList.appendChild(button)
       this.humusRows.push({
+        id: def.id,
+        button,
+        count: button.querySelector<HTMLElement>('[data-count]')!,
+        cost: button.querySelector<HTMLElement>('[data-cost]')!,
+        desc: button.querySelector<HTMLElement>('[data-desc]')!,
+      })
+    }
+
+    const sporeList = q('[data-spore-list]')
+    for (const def of SPORE_UPGRADES) {
+      const button = document.createElement('button')
+      button.className = 'item spore-item'
+      button.innerHTML = `
+        <span class="row"><span class="name">${def.name}</span><span class="count" data-count>0</span></span>
+        <span class="row sub"><span data-cost></span></span>
+        <span class="desc" data-desc></span>`
+      button.addEventListener('click', () => this.actions.buySpore(def.id))
+      sporeList.appendChild(button)
+      this.sporeRows.push({
         id: def.id,
         button,
         count: button.querySelector<HTMLElement>('[data-count]')!,
@@ -352,11 +397,35 @@ export class Panel {
       button.disabled = !def || !canBuyUpgrade(state, def)
       if (!button.disabled) affordable += 1
     }
+    affordable += this.updateSpores(state)
     this.badge.classList.toggle('zero', affordable === 0)
     this.badge.textContent = String(affordable)
     this.badge.title = `${affordable} Verbesserung${affordable === 1 ? '' : 'en'} kaufbar`
 
     this.updateAutumn(state)
+  }
+
+  /** Zeigt Sporen und ihre Verbesserungen; gibt die Zahl kaufbarer Verbesserungen zurück. */
+  private updateSpores(state: GameState): number {
+    const perSecond = sporesPerSecond(state)
+    const known = state.spores > 0 || perSecond > 0
+    this.sporeStat.hidden = !known
+    this.sporeSection.hidden = !known
+    if (!known) return 0
+    this.sporeValue.textContent = formatNumber(state.spores, 1)
+    this.sporeRate.textContent = `+${formatNumber(perSecond, 2)} / Sek`
+    let affordable = 0
+    for (const row of this.sporeRows) {
+      const def = SPORE_UPGRADES.find((u) => u.id === row.id)!
+      const level = sporeLevel(state, row.id)
+      const max = def.costs.length
+      row.count.textContent = `${level}/${max}`
+      row.cost.textContent = level >= max ? 'Maximal' : `${formatNumber(def.costs[level])} Sporen`
+      row.desc.textContent = level >= max ? def.effect(level) : `${def.effect(level)} → ${def.effect(level + 1)}`
+      row.button.disabled = !canBuySporeUpgrade(state, row.id)
+      if (!row.button.disabled) affordable += 1
+    }
+    return affordable
   }
 
   private updateAutumn(state: GameState): void {

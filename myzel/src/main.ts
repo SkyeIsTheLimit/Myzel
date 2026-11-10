@@ -15,6 +15,7 @@ import {
   click,
   buyHumusUpgrade,
   buyPig,
+  buySporeUpgrade,
   collectTruffle,
   growthScore,
   newState,
@@ -214,6 +215,7 @@ async function main(): Promise<void> {
     buyUpgrade: (id) => { buyUpgrade(state, id) },
     buyPig: () => { if (buyPig(state)) refreshWorld() },
     buyHumus: (id) => { if (buyHumusUpgrade(state, id)) refreshAll() },
+    buySpore: (id) => { buySporeUpgrade(state, id) },
     prestige: () => {
       const gain = prestigeGain(state)
       if (gain < 1) return

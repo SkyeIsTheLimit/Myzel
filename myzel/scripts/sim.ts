@@ -10,6 +10,7 @@ import {
   buyBuilding,
   buyHumusUpgrade,
   buyPig,
+  buySporeUpgrade,
   buyUpgrade,
   canBuyPig,
   claimCell,
@@ -33,6 +34,7 @@ import type { GameState } from '../src/game/state.ts'
 const CPS = Number(process.argv[2] ?? 4)
 const AUTUMNS = Number(process.argv[3] ?? 6)
 const MIN_GAIN = Number(process.argv[4] ?? 1)
+const SPORE_ORDER = ['dense', 'germ', 'bloom', 'harvest']
 const HUMUS_ORDER = ['seed', 'cheap', 'web', 'sniff', 'scent', 'sleep']
 
 let seed = 12345
@@ -135,10 +137,11 @@ while (s.autumns < AUTUMNS && t < 3600 * Number(process.argv[5] ?? 24)) {
   }
   let guard = 0
   while (shop(s) && guard++ < 50);
+  for (const id of SPORE_ORDER) while (buySporeUpgrade(s, id));
 
   const run = t - runStart
   while (markIdx < marks.length && s.totalNutrients.gte(marks[markIdx])) {
-    log.push(`  Herbst ${s.autumns}: ${marks[markIdx].toExponential(0)} gesammelt nach ${fmt(run)}  (Prod ${productionPerSecond(s, false).toNumber().toFixed(1)}/s, Schweine ${s.pigs})`)
+    log.push(`  Herbst ${s.autumns}: ${marks[markIdx].toExponential(0)} gesammelt nach ${fmt(run)}  (Prod ${productionPerSecond(s, false).toNumber().toFixed(1)}/s, Schweine ${s.pigs}, Sporen ${s.spores.toFixed(0)}, Stufen ${JSON.stringify(s.sporeLevels)})`)
     markIdx++
   }
   // Herbst, sobald er sich lohnt: mindestens 1 Humus und der Zuwachs ist spürbar gegenüber dem bisherigen Bestand.

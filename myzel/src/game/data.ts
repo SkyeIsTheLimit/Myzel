@@ -91,7 +91,7 @@ export const NODES: NodeDef[] = [
   {
     id: 'fruit',
     name: 'Fruchtknoten',
-    desc: 'Nur in den obersten zwei Reihen. +75 % je Leitbahn.',
+    desc: 'Nur in den obersten zwei Reihen. +75 % je Leitbahn. Streut Sporen.',
     baseCost: 3000,
     costGrowth: 1.12,
     baseProd: 40,

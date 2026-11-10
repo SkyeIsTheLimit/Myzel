@@ -12,6 +12,7 @@ import {
   isClaimable,
   isTreeCell,
   newGrid,
+  nodeBreakdown,
   nodeCostValue,
   nodeCountOf,
   placementGain,
@@ -30,11 +31,21 @@ import {
   truffleLifetimeBonus,
   truffleRateBonus,
 } from './prestige.ts'
+import {
+  SPORES_PER_FRUITING,
+  SPORES_PER_FRUIT_NODE,
+  SPORE_UPGRADES,
+  bloomMult,
+  denseMult,
+  germMult,
+  getSporeUpgrade,
+  harvestMult,
+} from './spores.ts'
 import type { BuffType } from './truffle.ts'
 import { formatNumber } from './format.ts'
 
 export const TICK_RATE = 10
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 /** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
 export const MAX_OFFLINE_SECONDS = 8 * 3600
 
@@ -58,6 +69,9 @@ export interface GameState {
   humusLevels: Record<string, number>
   /** Wie oft der Herbst schon eingeläutet wurde. */
   autumns: number
+  /** Sporen bleiben über den Herbst hinweg erhalten. */
+  spores: number
+  sporeLevels: Record<string, number>
   /** Unix-Zeit (ms) des letzten Speicherns, für den Offline-Fortschritt. */
   lastSaved: number
 }
@@ -87,6 +101,9 @@ export interface SaveData {
   totalHumus?: number
   humusLevels?: Record<string, number>
   autumns?: number
+  /** Ab Version 5. */
+  spores?: number
+  sporeLevels?: Record<string, number>
   lastSaved: number
 }
 
@@ -108,12 +125,18 @@ export function newState(now = Date.now()): GameState {
     totalHumus: 0,
     humusLevels: {},
     autumns: 0,
+    spores: 0,
+    sporeLevels: {},
     lastSaved: now,
   }
 }
 
 export function humusLevel(state: GameState, id: string): number {
   return state.humusLevels[id] ?? 0
+}
+
+export function sporeLevel(state: GameState, id: string): number {
+  return state.sporeLevels[id] ?? 0
 }
 
 export function humusMult(state: GameState): number {
@@ -155,7 +178,26 @@ function upgradeMult(state: GameState, match: (u: UpgradeDef) => boolean): numbe
 /** Produktion eines einzelnen Gebäudes inklusive Gebäude-Upgrades. */
 export function unitProduction(state: GameState, def: BuildingDef): Decimal {
   const mult = upgradeMult(state, (u) => u.effect.type === 'building' && u.effect.target === def.id)
-  return new Decimal(def.baseProd).mul(mult)
+  return new Decimal(def.baseProd).mul(mult).mul(sporeBuildingMult(state, def.id))
+}
+
+/** Sporen-Verbesserungen, die einzelne Gebäude vervielfachen. */
+function sporeBuildingMult(state: GameState, id: string): number {
+  if (id === 'hypha' || id === 'strand') return germMult(sporeLevel(state, 'germ'))
+  if (id === 'fruiting') return bloomMult(sporeLevel(state, 'bloom'))
+  return 1
+}
+
+/** Gitterproduktion; Fruchtknoten bekommen zusätzlich „Blütenpracht“. */
+function gridProductionWithSpores(state: GameState): number {
+  let sum = gridProduction(state.grid)
+  const bloom = bloomMult(sporeLevel(state, 'bloom'))
+  if (bloom !== 1) {
+    state.grid.nodes.forEach((id, i) => {
+      if (id === 'fruit') sum += nodeBreakdown(state.grid.nodes, i, id).production * (bloom - 1)
+    })
+  }
+  return sum
 }
 
 export function buildingProduction(state: GameState, def: BuildingDef): Decimal {
@@ -178,10 +220,17 @@ export function buffMult(state: GameState, type: BuffType): number {
 
 /** Mit `withBuffs = false` ohne temporäre Trüffel-Buffs, z. B. als Grundlage für Einmal-Belohnungen. */
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
-  let sum = new Decimal(gridProduction(state.grid))
+  let sum = new Decimal(gridProductionWithSpores(state))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state)).mul(humusMult(state))
+  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense')))
   return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
+}
+
+/** Sporen pro Sekunde: Fruchtkörper und Fruchtknoten, mit „Sporenernte“. */
+export function sporesPerSecond(state: GameState): number {
+  const nodes = state.grid.nodes.filter((n) => n === 'fruit').length
+  const base = (state.buildings.fruiting ?? 0) * SPORES_PER_FRUITING + nodes * SPORES_PER_FRUIT_NODE
+  return base * harvestMult(sporeLevel(state, 'harvest'))
 }
 
 export function clickValue(state: GameState): Decimal {
@@ -302,6 +351,7 @@ export function click(state: GameState): Decimal {
 }
 
 export function tick(state: GameState, dtSeconds: number): void {
+  state.spores += sporesPerSecond(state) * dtSeconds
   let left = dtSeconds
   while (left > 0) {
     state.buffs = state.buffs.filter((b) => b.remaining > 1e-9)
@@ -406,6 +456,21 @@ export function buyHumusUpgrade(state: GameState, id: string): boolean {
   return true
 }
 
+export function canBuySporeUpgrade(state: GameState, id: string): boolean {
+  const def = getSporeUpgrade(id)
+  if (!def) return false
+  const level = sporeLevel(state, id)
+  return level < def.costs.length && state.spores >= def.costs[level]
+}
+
+export function buySporeUpgrade(state: GameState, id: string): boolean {
+  if (!canBuySporeUpgrade(state, id)) return false
+  const level = sporeLevel(state, id)
+  state.spores -= getSporeUpgrade(id)!.costs[level]
+  state.sporeLevels[id] = level + 1
+  return true
+}
+
 /** Rechnet die Abwesenheit nach; gibt die verdienten Nährstoffe und die angerechneten Sekunden zurück. */
 export function applyOffline(state: GameState, now = Date.now()): { gained: Decimal; seconds: number } {
   const seconds = Math.min(offlineCap(state), Math.max(0, (now - state.lastSaved) / 1000))
@@ -435,6 +500,8 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     totalHumus: state.totalHumus,
     humusLevels: { ...state.humusLevels },
     autumns: state.autumns,
+    spores: state.spores,
+    sporeLevels: { ...state.sporeLevels },
     lastSaved: now,
   }
 }
@@ -456,7 +523,7 @@ export function deserialize(data: unknown): GameState | null {
   if (typeof data !== 'object' || data === null) return null
   const d = data as Partial<SaveData>
   // Version 1 hatte noch kein Gitter; es wird dann mit den Startfeldern angelegt.
-  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== SAVE_VERSION) return null
+  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== SAVE_VERSION) return null
   if (typeof d.nutrients !== 'string' || typeof d.totalNutrients !== 'string') return null
   const state = newState(typeof d.lastSaved === 'number' ? d.lastSaved : Date.now())
   state.nutrients = new Decimal(d.nutrients)
@@ -482,6 +549,11 @@ export function deserialize(data: unknown): GameState | null {
   for (const def of HUMUS_UPGRADES) {
     const level = count(d.humusLevels?.[def.id])
     if (level > 0) state.humusLevels[def.id] = Math.min(level, def.costs.length)
+  }
+  state.spores = typeof d.spores === 'number' && Number.isFinite(d.spores) && d.spores > 0 ? d.spores : 0
+  for (const def of SPORE_UPGRADES) {
+    const level = count(d.sporeLevels?.[def.id])
+    if (level > 0) state.sporeLevels[def.id] = Math.min(level, def.costs.length)
   }
   return state
 }

@@ -2,6 +2,7 @@ import { BUILDINGS, NODES, UPGRADES } from '../game/data.ts'
 import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
 import { HUMUS_DIVISOR, HUMUS_UPGRADES, humusMultiplier } from '../game/prestige.ts'
+import { ACHIEVEMENTS, ACHIEVEMENT_BONUS } from '../game/achievements.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
 import { WEB_BRANCHES, WEB_NODES, connectedTrees, getWebNode, webRequirementsMet } from '../game/web.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
@@ -97,6 +98,8 @@ export class Panel {
   private sporeRows: HumusRow[] = []
   private webRows: Array<{ id: string; button: HTMLButtonElement; cost: HTMLElement; desc: HTMLElement; state: HTMLElement }> = []
   private webTab: HTMLButtonElement
+  private achRows: Array<{ id: string; row: HTMLElement }> = []
+  private achSummary: HTMLElement
   private webSummary: HTMLElement
   private sporeStat: HTMLElement
   private sporeValue: HTMLElement
@@ -191,6 +194,10 @@ export class Panel {
           <div class="list" data-humus-list></div>
         </section>
         <section data-pane="system" hidden>
+          <h2 class="subhead">Erfolge</h2>
+          <p class="hint small" data-ach-summary></p>
+          <div class="ach-list" data-ach-list></div>
+          <h2 class="subhead">Spielstand</h2>
           <footer>
             <button data-act="save">Speichern</button>
             <button data-act="export">Export</button>
@@ -205,6 +212,15 @@ export class Panel {
     this.nutrients = q('[data-nutrients]')
     this.perSecond = q('[data-pps]')
     this.perClick = q('[data-ppc]')
+    this.achSummary = q('[data-ach-summary]')
+    const achList = q('[data-ach-list]')
+    for (const def of ACHIEVEMENTS) {
+      const row = document.createElement('div')
+      row.className = 'ach'
+      row.innerHTML = `<span class="ach-name">${def.name}</span><span class="ach-desc">${def.desc}</span>`
+      achList.appendChild(row)
+      this.achRows.push({ id: def.id, row })
+    }
     this.webTab = q('[data-web-tab]')
     this.webSummary = q('[data-web-summary]')
     this.sporeStat = q('[data-spores]')
@@ -448,6 +464,13 @@ export class Panel {
     this.badge.title = `${affordable} Verbesserung${affordable === 1 ? '' : 'en'} kaufbar`
 
     this.updateAutumn(state)
+    this.updateAchievements(state)
+  }
+
+  private updateAchievements(state: GameState): void {
+    const n = state.achievements.length
+    this.achSummary.textContent = `${n} / ${ACHIEVEMENTS.length} freigeschaltet · +${Math.round(n * ACHIEVEMENT_BONUS * 100)} % Produktion`
+    for (const { id, row } of this.achRows) row.classList.toggle('done', state.achievements.includes(id))
   }
 
   /** Zeigt den Forschungsbaum; gibt die Zahl kaufbarer Forschungen zurück. */

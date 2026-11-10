@@ -17,6 +17,7 @@ import {
   buyPig,
   buySporeUpgrade,
   buyWeb,
+  checkAchievements,
   collectTruffle,
   growthScore,
   newState,
@@ -268,6 +269,8 @@ async function main(): Promise<void> {
   })
   root.appendChild(panel.element)
 
+  // Schon erreichte Erfolge (etwa nach einem Update) still verbuchen, ohne Meldung.
+  checkAchievements(state)
   refreshAll()
   if (offline.seconds > 60) {
     showToast(`Willkommen zurück! In ${formatDuration(offline.seconds)} hat das Myzel ${formatNumber(offline.gained)} Nährstoffe gesammelt.`, 7000)
@@ -303,6 +306,7 @@ async function main(): Promise<void> {
     sinceUi += dtMs
     if (sinceUi >= UI_REFRESH_MS) {
       sinceUi = 0
+      for (const a of checkAchievements(state)) showToast(`Erfolg: ${a.name}  (+2 % Produktion)`, 4500)
       world.setAutumn(autumnProgress(state.totalNutrients))
       panel.update(state, tool)
       updateHover()

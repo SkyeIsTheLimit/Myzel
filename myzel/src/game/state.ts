@@ -41,13 +41,15 @@ import {
   getSporeUpgrade,
   harvestMult,
 } from './spores.ts'
+import { ACHIEVEMENTS, achievementMult } from './achievements.ts'
+import type { AchievementDef } from './achievements.ts'
 import { WEB_NODES, getWebNode, webEffects, webRequirementsMet } from './web.ts'
 import type { WebEffects } from './web.ts'
 import type { BuffType } from './truffle.ts'
 import { formatNumber } from './format.ts'
 
 export const TICK_RATE = 10
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 /** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
 export const MAX_OFFLINE_SECONDS = 2 * 3600
 
@@ -76,6 +78,8 @@ export interface GameState {
   sporeLevels: Record<string, number>
   /** Erforschte Knoten des Wood Wide Web; bleiben über den Herbst hinweg erhalten. */
   web: string[]
+  /** Freigeschaltete Erfolge; jeder gibt einen kleinen dauerhaften Produktionsbonus. */
+  achievements: string[]
   /** Unix-Zeit (ms) des letzten Speicherns, für den Offline-Fortschritt. */
   lastSaved: number
 }
@@ -110,6 +114,8 @@ export interface SaveData {
   sporeLevels?: Record<string, number>
   /** Ab Version 6. */
   web?: string[]
+  /** Ab Version 7. */
+  achievements?: string[]
   lastSaved: number
 }
 
@@ -134,6 +140,7 @@ export function newState(now = Date.now()): GameState {
     spores: 0,
     sporeLevels: {},
     web: [],
+    achievements: [],
     lastSaved: now,
   }
 }
@@ -238,7 +245,7 @@ export function buffMult(state: GameState, type: BuffType): number {
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
   let sum = new Decimal(gridProductionWithSpores(state))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global)
+  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global).mul(achievementMult(state.achievements.length))
   return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
 }
 
@@ -479,6 +486,13 @@ export function canBuySporeUpgrade(state: GameState, id: string): boolean {
   return level < def.costs.length && state.spores >= def.costs[level]
 }
 
+/** Schaltet alle neu erreichten Erfolge frei und gibt sie zurück. */
+export function checkAchievements(state: GameState): AchievementDef[] {
+  const fresh = ACHIEVEMENTS.filter((a) => !state.achievements.includes(a.id) && a.test(state))
+  for (const a of fresh) state.achievements.push(a.id)
+  return fresh
+}
+
 export function canBuyWeb(state: GameState, id: string): boolean {
   const def = getWebNode(id)
   return !!def && !state.web.includes(id) && webRequirementsMet(state.web, def) && state.spores >= def.cost
@@ -531,6 +545,7 @@ export function serialize(state: GameState, now = Date.now()): SaveData {
     spores: state.spores,
     sporeLevels: { ...state.sporeLevels },
     web: [...state.web],
+    achievements: [...state.achievements],
     lastSaved: now,
   }
 }
@@ -552,7 +567,7 @@ export function deserialize(data: unknown): GameState | null {
   if (typeof data !== 'object' || data === null) return null
   const d = data as Partial<SaveData>
   // Version 1 hatte noch kein Gitter; es wird dann mit den Startfeldern angelegt.
-  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== 5 && d.version !== SAVE_VERSION) return null
+  if (d.version !== 1 && d.version !== 2 && d.version !== 3 && d.version !== 4 && d.version !== 5 && d.version !== 6 && d.version !== SAVE_VERSION) return null
   if (typeof d.nutrients !== 'string' || typeof d.totalNutrients !== 'string') return null
   const state = newState(typeof d.lastSaved === 'number' ? d.lastSaved : Date.now())
   state.nutrients = new Decimal(d.nutrients)
@@ -585,5 +600,6 @@ export function deserialize(data: unknown): GameState | null {
     if (level > 0) state.sporeLevels[def.id] = Math.min(level, def.costs.length)
   }
   state.web = Array.isArray(d.web) ? WEB_NODES.map((n) => n.id).filter((id) => d.web!.includes(id)) : []
+  state.achievements = Array.isArray(d.achievements) ? ACHIEVEMENTS.map((a) => a.id).filter((id) => d.achievements!.includes(id)) : []
   return state
 }

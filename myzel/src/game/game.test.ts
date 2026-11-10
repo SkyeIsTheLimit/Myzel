@@ -82,7 +82,8 @@ describe('Offline', () => {
     s.buildings.hypha = 10
     const { seconds } = applyOffline(s, 1000 * 3600 * 100)
     expect(seconds).toBe(MAX_OFFLINE_SECONDS)
-    expect(s.nutrients.toNumber()).toBeCloseTo(MAX_OFFLINE_SECONDS)
+    // 1 Nährstoff/Sek, offline nur mit Faktor 0,2.
+    expect(s.nutrients.toNumber()).toBeCloseTo(MAX_OFFLINE_SECONDS * 0.2)
   })
 })
 

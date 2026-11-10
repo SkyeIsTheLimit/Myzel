@@ -25,6 +25,7 @@ import {
   getHumusUpgrade,
   humusGain,
   humusMultiplier,
+  offlineEffectiveSeconds,
   offlineHours,
   startCells,
   startNutrients,
@@ -47,7 +48,7 @@ import { formatNumber } from './format.ts'
 export const TICK_RATE = 10
 export const SAVE_VERSION = 5
 /** Grundwert; mit der Humus-Verbesserung „Langer Schlaf“ steigt er (siehe `offlineCap`). */
-export const MAX_OFFLINE_SECONDS = 8 * 3600
+export const MAX_OFFLINE_SECONDS = 2 * 3600
 
 export interface GameState {
   nutrients: Decimal
@@ -475,7 +476,7 @@ export function buySporeUpgrade(state: GameState, id: string): boolean {
 export function applyOffline(state: GameState, now = Date.now()): { gained: Decimal; seconds: number } {
   const seconds = Math.min(offlineCap(state), Math.max(0, (now - state.lastSaved) / 1000))
   const before = state.nutrients
-  tick(state, seconds)
+  tick(state, offlineEffectiveSeconds(seconds))
   state.lastSaved = now
   return { gained: state.nutrients.sub(before), seconds }
 }

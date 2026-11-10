@@ -42,25 +42,25 @@ export const SPORE_UPGRADES: SporeUpgradeDef[] = [
   {
     id: 'dense',
     name: 'Dichte Sporen',
-    costs: geo(20, 2.2, 10),
+    costs: geo(20, 1.6, 20),
     effect: (l) => `Alle Produktion ${pct(denseMult(l))}`,
   },
   {
     id: 'harvest',
     name: 'Sporenernte',
-    costs: geo(15, 2.5, 6),
+    costs: geo(15, 2.5, 10),
     effect: (l) => `Sporen ${pct(harvestMult(l))}`,
   },
   {
     id: 'germ',
     name: 'Keimlinge',
-    costs: geo(40, 5, 4),
+    costs: geo(40, 5, 6),
     effect: (l) => `Hyphen und Myzelstränge ×${germMult(l)}`,
   },
   {
     id: 'bloom',
     name: 'Blütenpracht',
-    costs: geo(80, 5, 5),
+    costs: geo(80, 5, 7),
     effect: (l) => `Fruchtkörper und Fruchtknoten ${pct(bloomMult(l))}`,
   },
 ]

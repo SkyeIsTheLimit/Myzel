@@ -28,7 +28,7 @@ import {
   truffleBonus,
   truffleLifetime,
 } from './game/state.ts'
-import { HUMUS_BONUS, autumnProgress } from './game/prestige.ts'
+import { autumnProgress, humusMultiplier } from './game/prestige.ts'
 import type { GameState } from './game/state.ts'
 import { TRUFFLE_FIRST_MAX, TRUFFLE_FIRST_MIN, nextSpawnDelay } from './game/truffle.ts'
 import { deleteSave, exportSave, importSave, loadGame, saveGame } from './game/save.ts'
@@ -219,7 +219,7 @@ async function main(): Promise<void> {
     prestige: () => {
       const gain = prestigeGain(state)
       if (gain < 1) return
-      const bonus = Math.round(gain * HUMUS_BONUS * 100)
+      const bonus = Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)
       const ok = window.confirm(
         `Herbst einläuten?\n\nDu erhältst ${gain} Humus (+${bonus} % Produktion dauerhaft).\n` +
           'Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt.\nHumus, Schweine und Fundzähler bleiben.',

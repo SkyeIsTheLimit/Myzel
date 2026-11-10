@@ -1,7 +1,7 @@
 import { BUILDINGS, NODES, UPGRADES } from '../game/data.ts'
 import { nodeCountOf } from '../game/grid.ts'
 import { MAX_PIGS, PIG_RATE_BONUS, getBuffDef, pigCost } from '../game/truffle.ts'
-import { HUMUS_BONUS, HUMUS_DIVISOR, HUMUS_UPGRADES } from '../game/prestige.ts'
+import { HUMUS_DIVISOR, HUMUS_UPGRADES, humusMultiplier } from '../game/prestige.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
 import type { Tool } from './tooltip.ts'
@@ -443,7 +443,7 @@ export class Panel {
     const next = formatNumber((gain + 1) * (gain + 1) * HUMUS_DIVISOR)
     this.autumnHint.textContent =
       gain >= 1
-        ? `Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt. Humus, Schweine und Fundzähler bleiben. Jeder Humus gibt dauerhaft +${Math.round(HUMUS_BONUS * 100)} % Produktion. Nächster Humus bei ${next} Nährstoffen.`
+        ? `Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt. Humus, Schweine und Fundzähler bleiben. Humus erhöht die Produktion dauerhaft (je mehr du hast, desto weniger bringt der einzelne). Dieser Herbst: +${Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)} %. Nächster Humus bei ${next} Nährstoffen.`
         : `Sammle in diesem Durchgang ${formatNumber(HUMUS_DIVISOR)} Nährstoffe für den ersten Humus. Die Bäume färben sich schon herbstlich, je näher du kommst.`
 
     for (const row of this.humusRows) {

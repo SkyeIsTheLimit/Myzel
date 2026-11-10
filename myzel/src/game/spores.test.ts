@@ -16,7 +16,7 @@ import Decimal from 'break_infinity.js'
 
 const rich = () => {
   const s = newState()
-  s.spores = 100_000
+  s.spores = 10_000_000
   return s
 }
 
@@ -54,7 +54,7 @@ describe('Sporen-Verbesserungen', () => {
     const s = rich()
     const def = SPORE_UPGRADES.find((u) => u.id === 'dense')!
     for (let i = 0; i < def.costs.length; i++) expect(buySporeUpgrade(s, 'dense')).toBe(true)
-    expect(s.spores).toBe(100_000 - def.costs.reduce((a, b) => a + b, 0))
+    expect(s.spores).toBe(10_000_000 - def.costs.reduce((a, b) => a + b, 0))
     expect(canBuySporeUpgrade(s, 'dense')).toBe(false)
   })
 

@@ -2,8 +2,17 @@ import Decimal from 'break_infinity.js'
 
 /** Gesammelte Nährstoffe eines Durchgangs, ab denen es den ersten Humus gibt. */
 export const HUMUS_DIVISOR = 1e5
-/** Jeder je verdiente Humus erhöht die Produktion dauerhaft um diesen Anteil. */
+/** Faktor des Humus-Bonus: Produktion ×(1 + HUMUS_BONUS · Humus^HUMUS_EXPONENT). */
 export const HUMUS_BONUS = 0.15
+/** Unter 1: Jeder weitere Humus bringt etwas weniger als der vorige. */
+export const HUMUS_EXPONENT = 0.5
+/** Offline wird nur mit diesem Faktor verdient (und nur bis `offlineCap`). */
+export const OFFLINE_RATE = 0.2
+
+/** Sekunden Produktionszeit, die für eine Abwesenheit angerechnet werden. */
+export function offlineEffectiveSeconds(seconds: number): number {
+  return Math.max(0, seconds) * OFFLINE_RATE
+}
 
 /** Humus für einen Herbst: Wurzel aus (gesammelte Nährstoffe / HUMUS_DIVISOR). */
 export function humusGain(runNutrients: Decimal): number {
@@ -12,7 +21,7 @@ export function humusGain(runNutrients: Decimal): number {
 }
 
 export function humusMultiplier(totalHumus: number): number {
-  return 1 + HUMUS_BONUS * totalHumus
+  return 1 + HUMUS_BONUS * Math.pow(Math.max(0, totalHumus), HUMUS_EXPONENT)
 }
 
 /**
@@ -37,7 +46,7 @@ export interface HumusUpgradeDef {
 
 const at = <T>(values: T[], level: number): T => values[Math.min(level, values.length - 1)]
 
-export const START_NUTRIENTS = [0, 300, 3000, 30_000, 300_000]
+export const START_NUTRIENTS = [0, 200, 1000, 5000, 20_000]
 export const START_CELLS = [0, 4, 8, 14, 22]
 
 export function startNutrients(level: number): number {
@@ -64,7 +73,7 @@ export function buildingCostFactor(level: number): number {
 }
 
 export function offlineHours(level: number): number {
-  return 8 + 4 * level
+  return 2 + level
 }
 
 const fmtNum = (n: number): string => (n >= 1000 ? `${(n / 1000).toLocaleString('de-DE')} K` : String(n))

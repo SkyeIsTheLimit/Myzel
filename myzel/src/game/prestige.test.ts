@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import Decimal from 'break_infinity.js'
 import {
   HUMUS_BONUS,
+  HUMUS_EXPONENT,
+  offlineEffectiveSeconds,
   HUMUS_UPGRADES,
   autumnProgress,
   humusGain,
@@ -50,9 +52,16 @@ describe('Humus-Formel', () => {
     expect(Number.isFinite(humusGain(new Decimal('1e500')))).toBe(true)
   })
 
-  it('Bonus: +15 % je Humus', () => {
+  it('Bonus wächst unterlinear: jeder weitere Humus bringt weniger', () => {
     expect(humusMultiplier(0)).toBe(1)
-    expect(humusMultiplier(10)).toBeCloseTo(1 + 10 * HUMUS_BONUS)
+    expect(humusMultiplier(1)).toBeCloseTo(1 + HUMUS_BONUS)
+    expect(humusMultiplier(10)).toBeCloseTo(1 + HUMUS_BONUS * Math.pow(10, HUMUS_EXPONENT))
+    expect(humusMultiplier(20) - humusMultiplier(10)).toBeLessThan(humusMultiplier(10) - humusMultiplier(0))
+  })
+
+  it('Offline zählt nur mit Faktor 0,2', () => {
+    expect(offlineEffectiveSeconds(1000)).toBeCloseTo(200)
+    expect(offlineEffectiveSeconds(7200)).toBeCloseTo(1440)
   })
 
   it('Herbst-Fortschritt läuft logarithmisch von 0 bis 1', () => {
@@ -116,7 +125,7 @@ describe('Herbst einläuten', () => {
     s.buildings.hypha = 10
     const base = productionPerSecond(s).toNumber()
     s.totalHumus = 4
-    expect(productionPerSecond(s).toNumber()).toBeCloseTo(base * (1 + 4 * HUMUS_BONUS))
+    expect(productionPerSecond(s).toNumber()).toBeCloseTo(base * humusMultiplier(4))
   })
 
   it('lifetimeNutrients zählt über Durchgänge hinweg, totalNutrients nur den aktuellen', () => {
@@ -159,7 +168,7 @@ describe('Humus-Shop', () => {
     s.humus = 10
     buyHumusUpgrade(s, 'seed')
     prestige(s)
-    expect(s.nutrients.toNumber()).toBe(300)
+    expect(s.nutrients.toNumber()).toBe(200)
     expect(s.totalNutrients.toNumber()).toBe(0)
   })
 
@@ -199,13 +208,13 @@ describe('Humus-Shop', () => {
 
   it('Langer Schlaf verlängert die Offline-Zeit', () => {
     const s = rich()
-    expect(offlineCap(s)).toBe(8 * 3600)
+    expect(offlineCap(s)).toBe(2 * 3600)
     buyHumusUpgrade(s, 'sleep')
-    expect(offlineCap(s)).toBe(12 * 3600)
+    expect(offlineCap(s)).toBe(3 * 3600)
     s.lastSaved = 0
     s.buildings.hypha = 10
     const { seconds } = applyOffline(s, 100 * 3600 * 1000)
-    expect(seconds).toBe(12 * 3600)
+    expect(seconds).toBe(3 * 3600)
   })
 })
 

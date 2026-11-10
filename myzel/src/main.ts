@@ -39,6 +39,7 @@ import type { HoverInfo } from './render/grid.ts'
 import { WORLD_H, WORLD_W } from './render/sprites.ts'
 import { connectedTrees } from './game/web.ts'
 import { World } from './render/world.ts'
+import { askConfirm, askText, showText } from './ui/dialog.ts'
 import { Panel } from './ui/panel.ts'
 import { REMOVE_TOOL, cellTooltip } from './ui/tooltip.ts'
 import type { Tool } from './ui/tooltip.ts'
@@ -220,13 +221,14 @@ async function main(): Promise<void> {
     buyHumus: (id) => { if (buyHumusUpgrade(state, id)) refreshAll() },
     buySpore: (id) => { buySporeUpgrade(state, id) },
     buyWeb: (id) => { if (buyWeb(state, id)) refreshWorld() },
-    prestige: () => {
+    prestige: async () => {
       const gain = prestigeGain(state)
       if (gain < 1) return
       const bonus = Math.round((humusMultiplier(state.totalHumus + gain) / humusMultiplier(state.totalHumus) - 1) * 100)
-      const ok = window.confirm(
+      const ok = await askConfirm(
         `Herbst einläuten?\n\nDu erhältst ${gain} Humus (+${bonus} % Produktion dauerhaft).\n` +
           'Gebäude, Verbesserungen, Boden und Knoten werden zurückgesetzt.\nHumus, Schweine und Fundzähler bleiben.',
+        'Herbst einläuten',
       )
       if (!ok) return
       startAutumn(state)
@@ -243,11 +245,11 @@ async function main(): Promise<void> {
         await navigator.clipboard.writeText(text)
         showToast('Spielstand in die Zwischenablage kopiert.', 2500)
       } catch {
-        window.prompt('Spielstand kopieren:', text)
+        await showText('Kopiere den Spielstand aus dem Feld:', text)
       }
     },
-    importSave: () => {
-      const text = window.prompt('Exportierten Spielstand hier einfügen:')
+    importSave: async () => {
+      const text = await askText('Exportierten Spielstand hier einfügen:', 'Laden')
       if (!text) return
       const loaded = importSave(text)
       if (!loaded) { showToast('Spielstand ungültig.', 2500); return }
@@ -256,8 +258,8 @@ async function main(): Promise<void> {
       saveGame(state)
       showToast('Spielstand geladen.', 2000)
     },
-    reset: () => {
-      if (!window.confirm('Wirklich alles zurücksetzen?')) return
+    reset: async () => {
+      if (!(await askConfirm('Wirklich alles zurücksetzen? Der gesamte Spielstand geht verloren.', 'Neustart', true))) return
       deleteSave()
       state = newState()
       tool = null

@@ -147,10 +147,16 @@ async function main(): Promise<void> {
   let weatherLeft = 20 + Math.random() * 40
   const applyEnv = (): void => {
     state.env = env
-    world.weatherLayer.setSeason(env.season)
-    world.setSeason(env.season)
     world.weatherLayer.setWeather(env.weather)
   }
+  // Jahreszeitenwechsel passiert um Mitternacht (siehe World.setSeason); dann gilt auch ein neues Wetter.
+  world.onSeasonApplied = (season) => {
+    env.season = season
+    if (season) env.weather = pickWeather(season, Math.random())
+    weatherLeft = weatherDuration(Math.random())
+    applyEnv()
+  }
+  world.setSeason(env.season)
   env.weather = pickWeather(env.season!, Math.random())
   applyEnv()
 
@@ -300,13 +306,7 @@ async function main(): Promise<void> {
     const dtMs = ticker.deltaMS
     state.env = env
     weatherLeft -= Math.min(ticker.deltaMS / 1000, 1)
-    const season = seasonAt(Date.now())
-    if (!seasonLocked && season !== env.season) {
-      env.season = season
-      env.weather = pickWeather(season, Math.random())
-      weatherLeft = weatherDuration(Math.random())
-      applyEnv()
-    }
+    if (!seasonLocked) world.setSeason(seasonAt(Date.now()))
     if (weatherLeft <= 0) {
       env.weather = pickWeather(env.season!, Math.random())
       weatherLeft = weatherDuration(Math.random())
@@ -352,7 +352,7 @@ async function main(): Promise<void> {
 
   if (import.meta.env.DEV) {
     // Nur im Dev-Modus: Zugriff auf den Spielzustand für manuelle Tests.
-    Object.defineProperty(window, '__game', { get: () => ({ state, refreshAll, world, setEnv: (season: Season, weather: WeatherId) => { env.season = season; env.weather = weather; weatherLeft = 1e9; seasonLocked = true; applyEnv() }, spawnTruffle: () => world.truffles.spawn() }) })
+    Object.defineProperty(window, '__game', { get: () => ({ state, refreshAll, world, setEnv: (season: Season, weather: WeatherId) => { seasonLocked = true; weatherLeft = 1e9; world.setSeason(season, true); env.weather = weather; applyEnv() }, spawnTruffle: () => world.truffles.spawn() }) })
   }
 }
 

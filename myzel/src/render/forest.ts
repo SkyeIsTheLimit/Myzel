@@ -60,6 +60,13 @@ const FAR_SPRING: PinePalette[] = [
   { light: '#f2d6e2', mid: '#e4bfd0', dark: '#cca5b8' },
   { light: '#cfe6b0', mid: '#bcd69c', dark: '#a4be88' },
 ]
+/** Sommer: sattes, tiefes Grün. */
+const SUMMER_LEAF: PinePalette[] = [
+  { light: '#58bc4a', mid: '#37a03c', dark: '#1f7a2e' },
+  { light: '#4cb460', mid: '#2e9a4c', dark: '#1d7a38' },
+  { light: '#72c64c', mid: '#52ac3c', dark: '#348630' },
+]
+const BIRCH_SUMMER: PinePalette = { light: '#8ede58', mid: '#66c442', dark: '#449e34' }
 const BIRCH_SPRING: PinePalette = { light: '#cdf08c', mid: '#aadf66', dark: '#82bb4c' }
 const BIRCH_AUTUMN: PinePalette = { light: '#f3de80', mid: '#dcbc4e', dark: '#b4923a' }
 /** Tannen im Winter: bereift. */
@@ -77,6 +84,7 @@ interface Kind {
   autumn?: Texture[]
   winter?: Texture[]
   spring?: Texture[]
+  summer?: Texture[]
 }
 
 interface SeasonalTree {
@@ -85,6 +93,7 @@ interface SeasonalTree {
   autumn?: Texture
   winter?: Texture
   spring?: Texture
+  summer?: Texture
 }
 
 /**
@@ -110,6 +119,7 @@ export class Forest {
   private leafLayer = new Container()
   private leaves: Array<{ s: Sprite; vx: number; vy: number; phase: number; landY: number; fade: number }> = []
   private autumn = 0
+  private rayBoost = 1
   private burstTime = 0
   private leafAccum = 0
 
@@ -187,6 +197,7 @@ export class Forest {
         spring: [0, 1, 2, 3, 4].map((i) =>
           buildCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, i % 2 === 0 ? BLOSSOM[(i >> 1) % 2] : FRESH[(i >> 1) % 2], OAK_TRUNK),
         ),
+        summer: [0, 1, 2, 3, 4].map((i) => buildCanopyTexture(90 + i, 26 + (i % 3) * 5, 44 + (i % 4) * 6, SUMMER_LEAF[i % 3], OAK_TRUNK)),
         weight: 5,
       },
       // einzelne Herbstbäume als Farbtupfer
@@ -194,6 +205,7 @@ export class Forest {
         textures: [0, 1, 2].map((i) => buildCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, AUTUMN_LEAF[i % 2], OAK_TRUNK)),
         winter: [0, 1, 2].map((i) => buildBareCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, OAK_TRUNK)),
         spring: [0, 1, 2].map((i) => buildCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, BLOSSOM[i % 2], OAK_TRUNK)),
+        summer: [0, 1, 2].map((i) => buildCanopyTexture(100 + i, 26 + i * 4, 46 + i * 5, SUMMER_LEAF[i % 3], OAK_TRUNK)),
         weight: 1,
       },
       // Birken
@@ -202,6 +214,7 @@ export class Forest {
         autumn: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_AUTUMN, BIRCH_TRUNK)),
         winter: [0, 1, 2].map((i) => buildBareCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_TRUNK)),
         spring: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_SPRING, BIRCH_TRUNK)),
+        summer: [0, 1, 2].map((i) => buildCanopyTexture(110 + i, 18 + i * 2, 48 + i * 6, BIRCH_SUMMER, BIRCH_TRUNK)),
         weight: 2,
       },
     ]
@@ -277,10 +290,13 @@ export class Forest {
   /** Tauscht die Hintergrundbäume gegen ihre Herbst- oder Winterbilder (Tannen bekommen im Winter Frost). */
   setSeason(season: Season | null): void {
     for (const t of this.seasonal) {
-      const tex = season === 'autumn' ? t.autumn : season === 'winter' ? t.winter : season === 'spring' ? t.spring : undefined
+      const tex = season === 'autumn' ? t.autumn : season === 'winter' ? t.winter : season === 'spring' ? t.spring : season === 'summer' ? t.summer : undefined
       t.sprite.texture = tex ?? t.base
     }
-    this.springFlowers.visible = season === 'spring'
+    this.springFlowers.visible = season === 'spring' || season === 'summer'
+    // Im Sommer blühen die Blumen gelb und weiß, im Frühling bunt.
+    this.springFlowers.tint = season === 'summer' ? 0xfff0a8 : 0xffffff
+    this.rayBoost = season === 'summer' ? 1.5 : 1
   }
 
   /** Herbst-Fortschritt 0 bis 1; ab etwa 0.3 fallen vereinzelt Blätter. */
@@ -349,7 +365,7 @@ export class Forest {
     }
 
     for (const ray of this.rays) {
-      ray.g.alpha = light * light * (0.45 + 0.55 * Math.sin(this.time * 0.35 + ray.phase))
+      ray.g.alpha = Math.min(1, light * light * (0.45 + 0.55 * Math.sin(this.time * 0.35 + ray.phase)) * this.rayBoost)
     }
 
     const dark = (1 - light) * (1 - light)
@@ -371,8 +387,8 @@ export class Forest {
       const kind = kinds.find((k) => (pick -= k.weight) < 0) ?? kinds[0]
       const index = Math.floor(this.random() * kind.textures.length)
       const sprite = new Sprite(kind.textures[index])
-      if (kind.autumn || kind.winter || kind.spring) {
-        this.seasonal.push({ sprite, base: kind.textures[index], autumn: kind.autumn?.[index], winter: kind.winter?.[index], spring: kind.spring?.[index] })
+      if (kind.autumn || kind.winter || kind.spring || kind.summer) {
+        this.seasonal.push({ sprite, base: kind.textures[index], autumn: kind.autumn?.[index], winter: kind.winter?.[index], spring: kind.spring?.[index], summer: kind.summer?.[index] })
       }
       sprite.anchor.set(0.5, 1)
       // Der Fuß liegt unter der Grasreihe, die ihn verdeckt: keine Lücke zwischen Stamm und Boden.

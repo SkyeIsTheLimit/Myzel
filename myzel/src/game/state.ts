@@ -253,10 +253,20 @@ export function buffMult(state: GameState, type: BuffType): number {
 
 /** Mit `withBuffs = false` ohne temporäre Trüffel-Buffs, z. B. als Grundlage für Einmal-Belohnungen. */
 export function productionPerSecond(state: GameState, withBuffs = true): Decimal {
+  const sum = basePerSecond(state).mul(envFx(state).production)
+  return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
+}
+
+/** Dauerhafte Produktion ohne die kurzfristigen Boni aus Trüffel-Buffs sowie Jahreszeit und Wetter. */
+function basePerSecond(state: GameState): Decimal {
   let sum = new Decimal(gridProductionWithSpores(state))
   for (const def of BUILDINGS) sum = sum.add(buildingProduction(state, def))
-  sum = sum.mul(globalMult(state)).mul(humusMult(state)).mul(denseMult(sporeLevel(state, 'dense'))).mul(webFx(state).global).mul(achievementMult(state.achievements.length)).mul(envFx(state).production)
-  return withBuffs ? sum.mul(buffMult(state, 'production')) : sum
+  return sum
+    .mul(globalMult(state))
+    .mul(humusMult(state))
+    .mul(denseMult(sporeLevel(state, 'dense')))
+    .mul(webFx(state).global)
+    .mul(achievementMult(state.achievements.length))
 }
 
 /** Sporen pro Sekunde: Fruchtkörper und Fruchtknoten, mit „Sporenernte“. */
@@ -266,10 +276,20 @@ export function sporesPerSecond(state: GameState): number {
   return base * harvestMult(sporeLevel(state, 'harvest')) * webFx(state).sporeMult * envFx(state).spores
 }
 
+/**
+ * Ertrag eines Klicks. Er skaliert leicht mit der Produktion (1 % davon), damit er auch später relevant bleibt.
+ * Produktions-Boni (Trüffel-Wachstumsschub, Jahreszeit, Wetter) wirken auch aufs Klicken, Klick-Boni nur hier.
+ */
 export function clickValue(state: GameState): Decimal {
   const mult = upgradeMult(state, (u) => u.effect.type === 'click')
-  // Klicken skaliert leicht mit der Produktion, damit es auch später relevant bleibt.
-  return new Decimal(1).mul(mult).mul(humusMult(state)).add(productionPerSecond(state).mul(0.01)).mul(buffMult(state, 'click')).mul(envFx(state).click)
+  return new Decimal(1)
+    .mul(mult)
+    .mul(humusMult(state))
+    .add(basePerSecond(state).mul(0.01))
+    .mul(buffMult(state, 'click'))
+    .mul(envFx(state).click)
+    .mul(buffMult(state, 'production'))
+    .mul(envFx(state).production)
 }
 
 export function totalBuildings(state: GameState): number {
@@ -432,7 +452,7 @@ export function collectTruffle(state: GameState, rand: number): TruffleResult {
     case 'clickfrenzy': {
       const def = BUFFS.find((b) => b.id === reward.id)!
       addBuff(state, def.id)
-      const what = def.type === 'production' ? 'Produktion' : 'Klick-Ertrag'
+      const what = def.type === 'production' ? 'Produktion und Klick-Ertrag' : 'Klick-Ertrag'
       return { title: def.name, detail: `${what} ×${def.mult} für ${def.duration} Sek` }
     }
     case 'lucky':

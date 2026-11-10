@@ -83,3 +83,28 @@ describe('Wirkung', () => {
     expect(JSON.stringify(serialize(s))).not.toContain('rain')
   })
 })
+
+describe('Produktions-Boni wirken auch aufs Klicken', () => {
+  it('Jahreszeit und Wetter mit Produktionsbonus', () => {
+    const s = newState()
+    const base = clickValue(s).toNumber()
+    s.env = { season: 'summer', weather: 'rain' }
+    expect(clickValue(s).toNumber()).toBeCloseTo(base * 1.1 * 1.15)
+  })
+
+  it('Trüffel-Wachstumsschub vervielfacht den Klick', () => {
+    const s = newState()
+    const base = clickValue(s).toNumber()
+    s.buffs = [{ id: 'frenzy', remaining: 10 }]
+    expect(clickValue(s).toNumber()).toBeCloseTo(base * 7)
+  })
+
+  it('der 1-%-Anteil der Produktion zählt nicht doppelt', () => {
+    const s = newState()
+    s.buildings.hypha = 1000
+    s.env = { season: 'summer', weather: 'clear' }
+    const raw = productionPerSecond(s).toNumber() / 1.1
+    // 1 Basisklick plus 1 % der Produktion, danach einmal ×1,1.
+    expect(clickValue(s).toNumber()).toBeCloseTo((1 + raw * 0.01) * 1.1)
+  })
+})

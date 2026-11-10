@@ -9,7 +9,7 @@ export const SURFACE_Y = 88
 
 export const COLORS = {
   skyDay: [0x7cc8ee, 0x96d4f2, 0xb0e0f6, 0xcbebf9, 0xe2f4fb],
-  skyNight: [0x0b1026, 0x10183a, 0x172148, 0x1f2b57, 0x2a376a],
+  skyNight: [0x03050d, 0x060a1a, 0x0a102a, 0x0f1836, 0x152041],
   nightTint: 0x0a1230,
   mycelCore: '#f4efd0',
   mycelGlow: 'rgba(130,240,190,0.13)',
@@ -127,6 +127,7 @@ export interface TreePalette {
 export const GREEN_TREE: TreePalette = { light: '#5fb054', mid: '#3f8f3a', dark: '#2d6a2e', edge: '#234f27' }
 export const AUTUMN_TREE: TreePalette = { light: '#f2c14e', mid: '#e08a2f', dark: '#b8561f', edge: '#7a3a14' }
 
+export const SUMMER_TREE: TreePalette = { light: '#4cb04a', mid: '#2e9638', dark: '#1d7429', edge: '#145820' }
 export const BLOSSOM_TREE: TreePalette = { light: '#ffdcea', mid: '#f2a2c2', dark: '#d4739c', edge: '#a8466f' }
 export const FRESH_TREE: TreePalette = { light: '#bdeb74', mid: '#8fd24c', dark: '#60a838', edge: '#3f7a2a' }
 

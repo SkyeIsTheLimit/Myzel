@@ -50,8 +50,8 @@ export const SEASON_DESCS: Record<Season, string> = {
 
 /** Reihenfolge der Jahreszeiten im Spiel. */
 export const SEASON_ORDER: Season[] = ['spring', 'summer', 'autumn', 'winter']
-/** Wie lange eine Jahreszeit dauert (Sekunden Echtzeit); ein ganzes Jahr sind 32 Minuten. */
-export const SEASON_SECONDS = 480
+/** Wie lange eine Jahreszeit dauert (Sekunden Echtzeit): zwei Spieltage von je 5 Minuten, ein ganzes Jahr sind 40 Minuten. Gewechselt wird um Mitternacht. */
+export const SEASON_SECONDS = 600
 
 /** Jahreszeit zu einer Unix-Zeit (ms): läuft fest im Kreis, unabhängig vom Spielstand. */
 export function seasonAt(nowMs: number): Season {

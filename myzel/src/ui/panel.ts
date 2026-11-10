@@ -484,7 +484,7 @@ export class Panel {
     const w = WEATHERS.find((x) => x.id === weather)!
     const fx = envEffects(state.env)
     const pct = (m: number): string => `+${Math.round((m - 1) * 100)} %`
-    const effects = ([['Produktion', fx.production], ['Klick', fx.click], ['Trüffel', fx.truffle], ['Sporen', fx.spores]] as Array<[string, number]>)
+    const effects = ([['Produktion', fx.production], ['Klick', fx.click * fx.production], ['Trüffel', fx.truffle], ['Sporen', fx.spores]] as Array<[string, number]>)
       .filter(([, m]) => m !== 1)
       .map(([label, m]) => `${label} ${pct(m)}`)
       .join(' · ')

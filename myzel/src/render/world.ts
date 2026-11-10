@@ -22,6 +22,7 @@ import {
   buildSunTexture,
   AUTUMN_TREE,
   BLOSSOM_TREE,
+  SUMMER_TREE,
   FRESH_TREE,
   buildBareTreeTexture,
   buildTreeTexture,
@@ -40,6 +41,11 @@ const HYPHA_COUNT = 1300
 const TREE_X = TREE_COLS.map((c) => c * TILE + TILE / 2)
 const MUSHROOM_X = [10, 88, 166, 236, 268, 350, 368]
 const HYPHA_TOP = SURFACE_Y + 12
+
+/** Um Mitternacht (Tagesphase 0,75) wechselt die Jahreszeit; der schwarze Schleier blendet ein, hält kurz und blendet aus. */
+const MIDNIGHT = 0.75
+const VEIL_FADE = 1.1
+const VEIL_HOLD = 0.5
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v))
 
@@ -82,6 +88,10 @@ export class World {
   private time = DAY_LENGTH * 0.12
   private skyBands: Sprite[] = []
   private stars: Sprite[] = []
+  private moonHalo = new Graphics()
+  private ground = new Container()
+  /** Baumwurzeln im Boden; bekommen nachts dieselbe Farbe wie die Bäume darüber. */
+  private rootSprite = new Sprite()
   private clouds: Array<{ sprite: Sprite; speed: number }> = []
   private body = new Sprite()
   private sunTex = buildSunTexture()
@@ -92,7 +102,13 @@ export class World {
   private mushrooms: Sprite[] = []
   private forest = new Forest(SIDE, SKY_EXTRA)
   /** Herbst-Gegenstücke der Bäume; werden je nach Fortschritt eingeblendet. */
-  private autumnTrees: Array<{ sprite: Sprite; start: number; green: Sprite; bare: Sprite; spring: Sprite }> = []
+  private autumnTrees: Array<{ sprite: Sprite; start: number; green: Sprite; bare: Sprite; spring: Sprite; summer: Sprite }> = []
+  private seasonSet = false
+  private pendingSeason: Season | null = null
+  private targetSeason: Season | null = null
+  private prevPhase = 0.12
+  private veilTime = 0
+  private veil = pixelSprite(0x000000)
   private season: Season | null = null
   private autumnProgress = 0
 
@@ -125,7 +141,7 @@ export class World {
       this.skyBands.push(band)
       this.stage.addChild(band)
     }
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 170; i++) {
       const star = pixelSprite()
       const big = this.random() < 0.2
       star.width = star.height = big ? 2 : 1
@@ -135,6 +151,12 @@ export class World {
       this.stars.push(star)
       this.stage.addChild(star)
     }
+    // Mondschein: weiche Ringe hinter dem Mond, nur nachts sichtbar.
+    for (const [r, a] of [[26, 0.05], [19, 0.07], [13, 0.1], [9, 0.14]] as Array<[number, number]>) {
+      this.moonHalo.circle(0, 0, r).fill({ color: 0xcfd8ff, alpha: a })
+    }
+    this.moonHalo.alpha = 0
+    this.stage.addChild(this.moonHalo)
     this.body.anchor.set(0.5)
     this.stage.addChild(this.body)
     for (let i = 0; i < 9; i++) {
@@ -164,6 +186,7 @@ export class World {
       }
     })
     this.stage.addChild(ground)
+    this.ground = ground
 
     // Außerhalb des Spielfelds ist der Boden unerreichbar und wird abgedunkelt.
     const shade = new Graphics()
@@ -199,7 +222,8 @@ export class World {
       rc.fillStyle = '#5a3e24'
       if (t > 2) rc.fillRect(p.x + Math.floor(t / 2), p.y, 1, 1)
     }
-    this.stage.addChild(new Sprite(toTexture(rootLayer.canvas)))
+    this.rootSprite = new Sprite(toTexture(rootLayer.canvas))
+    this.stage.addChild(this.rootSprite)
 
     // Bäume, Totholz, Pilze
     // Baumreihe über die ganze Breite: die drei Spielbäume plus Deko-Bäume im gleichen Abstand.
@@ -208,6 +232,7 @@ export class World {
     const bareTextures = [0, 1, 2].map((i) => buildBareTreeTexture(30 + i * 7))
     const springTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, BLOSSOM_TREE))
     const freshTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, FRESH_TREE))
+    const summerTextures = [0, 1, 2].map((i) => buildTreeTexture(10 + i * 5, SUMMER_TREE))
     const autumnRandom = rng(777)
     const spacing = TREE_X[1] - TREE_X[0]
     const extra = Math.ceil(SIDE / spacing)
@@ -235,7 +260,12 @@ export class World {
       spring.position.copyFrom(tree.position)
       spring.visible = false
       this.stage.addChild(spring)
-      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55, green: tree, bare, spring })
+      const summer = new Sprite(summerTextures[((k % 3) + 3) % 3])
+      summer.anchor.set(0.5, 1)
+      summer.position.copyFrom(tree.position)
+      summer.visible = false
+      this.stage.addChild(summer)
+      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55, green: tree, bare, spring, summer })
     }
 
     this.log = new Sprite(buildLogTexture())
@@ -287,6 +317,12 @@ export class World {
     this.glowSprite = new Sprite(this.glowTex)
     this.glowSprite.blendMode = 'add'
     this.stage.addChild(this.glowSprite, new Sprite(this.coreTex), this.webLayer, this.gridLayer, this.truffles.container, this.flowLayer, this.sporeLayer)
+    // Der schwarze Schleier liegt über allem (auch über Boden und Myzel) und deckt die ganze Welt.
+    this.veil.position.set(-SIDE, -SKY_EXTRA)
+    this.veil.width = WORLD_W + 2 * SIDE
+    this.veil.height = WORLD_H + SKY_EXTRA + DEPTH_EXTRA
+    this.veil.alpha = 0
+    this.stage.addChild(this.veil)
     this.reveal(6)
   }
 
@@ -301,11 +337,61 @@ export class World {
     this.applySeasonTrees()
   }
 
-  /** Jahreszeit: im Herbst stehen alle Bäume in Herbstfarben, im Winter sind sie kahl. */
-  setSeason(season: Season | null): void {
+  /**
+   * Gewünschte Jahreszeit. Der erste Aufruf (oder `instant`) gilt sofort. Danach wird der Wechsel vorgemerkt und
+   * um Mitternacht vollzogen: Alles wird kurz schwarz, dahinter tauschen die Bäume, dann wird es wieder hell.
+   */
+  setSeason(season: Season | null, instant = false): void {
+    if (!this.seasonSet || instant) {
+      this.seasonSet = true
+      this.targetSeason = season
+      this.pendingSeason = null
+      this.veilTime = 0
+      this.veil.alpha = 0
+      this.applySeason(season)
+      this.onSeasonApplied(season)
+      return
+    }
+    this.targetSeason = season
+  }
+
+  /** Wird aufgerufen, sobald eine neue Jahreszeit tatsächlich sichtbar gilt. */
+  onSeasonApplied: (season: Season | null) => void = () => {}
+
+  /** Setzt die Jahreszeit sofort (Bäume, Hintergrund, Tönung). */
+  private applySeason(season: Season | null): void {
     this.season = season
     this.forest.setSeason(season)
+    this.weatherLayer.setSeason(season)
     this.applySeasonTrees()
+  }
+
+  /** Startet den Wechsel, wenn die Mitternacht überschritten wurde und eine andere Jahreszeit ansteht. */
+  private checkMidnight(prev: number, now: number): void {
+    const crossed = prev < MIDNIGHT && now >= MIDNIGHT
+    if (crossed && this.pendingSeason === null && this.veilTime === 0 && this.targetSeason !== this.season) {
+      this.pendingSeason = this.targetSeason
+      this.veilTime = 0.0001
+    }
+  }
+
+  private updateSeasonVeil(dt: number): void {
+    if (this.veilTime === 0) return
+    this.veilTime += dt
+    const t = this.veilTime
+    if (this.pendingSeason !== null && t >= VEIL_FADE + VEIL_HOLD / 2) {
+      const next = this.pendingSeason
+      this.pendingSeason = null
+      this.applySeason(next)
+      this.onSeasonApplied(next)
+    }
+    if (t < VEIL_FADE) this.veil.alpha = t / VEIL_FADE
+    else if (t < VEIL_FADE + VEIL_HOLD) this.veil.alpha = 1
+    else this.veil.alpha = Math.max(0, 1 - (t - VEIL_FADE - VEIL_HOLD) / VEIL_FADE)
+    if (t >= 2 * VEIL_FADE + VEIL_HOLD) {
+      this.veil.alpha = 0
+      this.veilTime = 0
+    }
   }
 
   private applySeasonTrees(): void {
@@ -313,7 +399,8 @@ export class World {
     const progress = this.season === 'autumn' ? 1 : winter ? 0 : this.autumnProgress
     for (const t of this.autumnTrees) {
       t.sprite.alpha = Math.max(0, Math.min(1, (progress - t.start) / 0.45))
-      t.green.visible = !winter && this.season !== 'spring'
+      t.green.visible = !winter && this.season !== 'spring' && this.season !== 'summer'
+      t.summer.visible = this.season === 'summer'
       t.spring.visible = this.season === 'spring'
       t.bare.alpha = winter ? 1 : 0
       if (winter) t.sprite.alpha = 0
@@ -413,14 +500,24 @@ export class World {
     const dt = dtMs / 1000
     this.time += dt
     const phase = (this.time / DAY_LENGTH) % 1
+    this.checkMidnight(this.prevPhase, phase)
+    this.prevPhase = phase
     const light = clamp01(0.5 + 1.1 * Math.sin(phase * Math.PI * 2))
 
     this.skyBands.forEach((band, i) => {
       band.tint = lerpColor(COLORS.skyNight[i], COLORS.skyDay[i], light)
     })
-    this.nightOverlay.alpha = (1 - light) * 0.4
+    const night = 1 - light
+    this.nightOverlay.alpha = night * 0.5
+    // Die Spielbäume liegen vor dem Hintergrundwald und würden sonst im Dunkeln zu hell stehen bleiben.
+    this.ground.tint = lerpColor(0x4a5688, 0xffffff, light)
+    const treeTint = lerpColor(0x6a7aa8, 0xffffff, light)
+    this.rootSprite.tint = treeTint
+    for (const t of this.autumnTrees) {
+      t.green.tint = t.sprite.tint = t.bare.tint = t.spring.tint = t.summer.tint = treeTint
+    }
     this.stars.forEach((star, i) => {
-      star.alpha = (1 - light) * (1 - light) * (0.65 + 0.35 * Math.sin(this.time * 2 + i))
+      star.alpha = Math.min(1, (1 - light) * (1 - light) * 1.15 * (0.7 + 0.3 * Math.sin(this.time * 2 + i)))
     })
 
     const isDay = phase < 0.5
@@ -428,7 +525,11 @@ export class World {
     this.body.texture = isDay ? this.sunTex : this.moonTex
     this.body.x = 24 + progress * (WORLD_W - 48)
     this.body.y = 56 - Math.sin(progress * Math.PI) * 40
-    this.body.alpha = isDay ? 1 : 0.9
+    this.body.alpha = isDay ? 1 : 1
+    const moon = isDay ? 0 : night
+    this.body.scale.set(isDay ? 1 : 1.5)
+    this.moonHalo.position.set(this.body.x, this.body.y)
+    this.moonHalo.alpha = Math.min(1, moon * 1.3)
 
     for (const c of this.clouds) {
       c.sprite.x += c.speed * dt
@@ -439,6 +540,7 @@ export class World {
 
     this.forest.update(dtMs, light)
     this.weatherLayer.update(dtMs, light)
+    this.updateSeasonVeil(dt)
     this.drawWeb()
     this.truffles.update(dtMs)
 

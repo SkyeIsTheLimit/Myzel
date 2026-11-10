@@ -10,7 +10,7 @@ const AREA_W = WORLD_W + 2 * SIDE
 
 const SEASON_TINT: Record<Season, { color: number; alpha: number }> = {
   spring: { color: 0xffc8e8, alpha: 0.07 },
-  summer: { color: 0xffe9a0, alpha: 0.08 },
+  summer: { color: 0xffdf80, alpha: 0.13 },
   autumn: { color: 0xff9040, alpha: 0.2 },
   winter: { color: 0xe8f2ff, alpha: 0.5 },
 }
@@ -43,8 +43,10 @@ export class WeatherLayer {
   private rain: Particle[] = []
   private snow: Particle[] = []
   private petals: Particle[] = []
+  private butterflies: Array<{ body: Sprite; x: number; y: number; phase: number; speed: number; radius: number }> = []
   private weather: WeatherId = 'clear'
   private season: Season | null = null
+  private tintBase = 0
   /** Wie stark das aktuelle Wetter sichtbar ist (0 bis 1); blendet sanft ein und aus. */
   private intensity: Record<WeatherId, number> = { clear: 0, rain: 0, fog: 0, snow: 0 }
   private time = 0
@@ -77,6 +79,20 @@ export class WeatherLayer {
       this.fog.push(band)
       this.container.addChild(band)
     }
+    for (let i = 0; i < 16; i++) {
+      const body = sprite(3, 2, [0xffd45c, 0xff8fb8, 0xffffff, 0xa6d4ff, 0xffb35c][i % 5])
+      body.anchor.set(0.5)
+      body.visible = false
+      this.container.addChild(body)
+      this.butterflies.push({
+        body,
+        x: -SIDE / 2 + this.rnd() * (WORLD_W + SIDE),
+        y: SURFACE_Y - 46 + this.rnd() * 38,
+        phase: this.rnd() * 10,
+        speed: 0.4 + this.rnd() * 0.5,
+        radius: 10 + this.rnd() * 22,
+      })
+    }
     this.fillParticles(this.rain, 420, 0xbfd8ff, 1, 4, () => ({ vx: -14, vy: 130 + this.rnd() * 40 }))
     this.fillParticles(this.snow, 320, 0xffffff, 2, 2, () => ({ vx: 0, vy: 14 + this.rnd() * 10 }))
     this.fillParticles(this.petals, 130, 0xffb6d0, 2, 1, () => ({ vx: 6 + this.rnd() * 6, vy: 8 + this.rnd() * 6 }))
@@ -101,13 +117,18 @@ export class WeatherLayer {
     this.season = season
     const t = season ? SEASON_TINT[season] : null
     this.tint.tint = t?.color ?? 0xffffff
-    this.tint.alpha = t?.alpha ?? 0
+    this.tintBase = t?.alpha ?? 0
+    this.tint.alpha = this.tintBase
     this.snowCover.visible = season === 'winter'
   }
 
   update(dtMs: number, light: number): void {
     const dt = Math.min(dtMs, 250) / 1000
     this.time += dt
+    // Die Tönung der Jahreszeit wirkt nur bei Tageslicht; nachts würde sie den Himmel aufhellen.
+    this.tint.alpha = this.tintBase * (0.08 + 0.92 * light)
+    const snowShade = Math.round(0x58 + (0xff - 0x58) * light)
+    this.snowCover.tint = (snowShade << 16) | (snowShade << 8) | Math.min(255, snowShade + 18)
     for (const id of Object.keys(this.intensity) as WeatherId[]) {
       const target = id === this.weather ? 1 : 0
       this.intensity[id] += Math.sign(target - this.intensity[id]) * Math.min(Math.abs(target - this.intensity[id]), dt / 3)
@@ -119,6 +140,20 @@ export class WeatherLayer {
     this.fog.forEach((band, i) => {
       band.alpha = fog * (0.24 + 0.08 * Math.sin(this.time * 0.4 + i * 1.7)) * brightness
       band.tint = light > 0.5 ? 0xe4eaf0 : 0x9aa6bc
+    })
+
+    // Schmetterlinge: im Sommer bei Tag und trockenem Wetter.
+    const calm = Math.max(0, 1 - this.intensity.rain - this.intensity.fog - this.intensity.snow)
+    const flutter = this.season === 'summer' ? calm * Math.max(0, (light - 0.4) / 0.6) : 0
+    this.butterflies.forEach((b, i) => {
+      const on = flutter > 0.05 && i < Math.ceil(this.butterflies.length * flutter)
+      b.body.visible = on
+      if (!on) return
+      const t = this.time * b.speed + b.phase
+      b.body.x = Math.round(b.x + Math.sin(t) * b.radius * 1.6 + Math.sin(t * 2.3) * 4)
+      b.body.y = Math.round(b.y + Math.sin(t * 1.7) * b.radius * 0.35 + Math.cos(t * 3.1) * 2)
+      b.body.scale.x = 1.3 * (0.35 + 0.65 * Math.abs(Math.sin(this.time * 9 + b.phase)))
+      b.body.alpha = flutter
     })
 
     this.move(this.rain, this.intensity.rain, dt, false)

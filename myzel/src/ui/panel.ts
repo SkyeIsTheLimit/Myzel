@@ -6,6 +6,7 @@ import { ACHIEVEMENTS, ACHIEVEMENT_BONUS } from '../game/achievements.ts'
 import { SEASON_NAMES, WEATHERS, envEffects } from '../game/weather.ts'
 import { SPORE_UPGRADES } from '../game/spores.ts'
 import { WEB_BRANCHES, WEB_NODES, connectedTrees, getWebNode, webRequirementsMet } from '../game/web.ts'
+import { showMenu } from './dialog.ts'
 import { REMOVE_TOOL } from './tooltip.ts'
 import type { Tool } from './tooltip.ts'
 import { formatNumber } from '../game/format.ts'
@@ -83,6 +84,10 @@ interface ToolRow {
 
 export class Panel {
   readonly element: HTMLElement
+  /** Kopfbereich (Titel, Ressourcen, Wetter, Buffs): gehört in die linke Spalte über dem Spiel. */
+  readonly hud: HTMLElement
+  /** Tab-Leiste: gehört in den rechten Teil des durchgehenden Balkens oben. */
+  readonly tabsBar: HTMLElement
   private tools: ToolRow[] = []
   private nutrients: HTMLElement
   private perSecond: HTMLElement
@@ -125,39 +130,63 @@ export class Panel {
     this.actions = actions
     this.element = document.createElement('aside')
     this.element.id = 'panel'
-    this.element.innerHTML = `
-      <div class="top">
-        <header>
-          <h1>MYZEL</h1>
-        </header>
-        <section class="stats">
-          <div class="stats-main">
-            <div class="stock">
-              <span class="big" data-nutrients>0</span>
-              <span class="label">Nährstoffe</span>
-            </div>
-            <div class="rates">
-              <span class="rate main" data-pps>0 / Sek</span>
-              <span class="rate" data-ppc>+1 / Klick</span>
-            </div>
+    this.hud = document.createElement('div')
+    this.hud.id = 'hud'
+    this.hud.innerHTML = `
+      <h1>MYZEL</h1>
+      <section class="stats">
+        <div class="stats-main">
+          <div class="stock">
+            <span class="big" data-nutrients>0</span>
+            <span class="label">Nährstoffe</span>
           </div>
-          <div class="spore-stat" data-spores hidden>
-            <span class="spore-label">Sporen</span>
-            <span class="spore-value" data-spore-value></span>
-            <span class="spore-rate" data-spore-rate></span>
+          <div class="rates">
+            <span class="rate main" data-pps>0 / Sek</span>
+            <span class="rate" data-ppc>+1 / Klick</span>
           </div>
-        </section>
+        </div>
+        <div class="spore-stat" data-spores hidden>
+          <span class="spore-label">Sporen</span>
+          <span class="spore-value" data-spore-value></span>
+          <span class="spore-rate" data-spore-rate></span>
+        </div>
+      </section>
+      <div class="status-row">
         <div class="env" data-env hidden></div>
-        <div class="buffs" data-buffs></div>
-      </div>
-      <nav class="tabs" role="tablist">
+        <div class="buffs-row">
+          <span class="buffs-label">Buffs</span>
+          <div class="buffs" data-buffs></div>
+        </div>
+      </div>`
+    this.tabsBar = document.createElement('nav')
+    this.tabsBar.className = 'tabs'
+    this.tabsBar.setAttribute('role', 'tablist')
+    this.tabsBar.innerHTML = `
         <button class="tab" role="tab" data-tab="growth">Wachstum</button>
         <button class="tab" role="tab" data-tab="nodes">Knoten</button>
         <button class="tab" role="tab" data-tab="upgrades">Upgrades<span class="badge zero" data-badge>0</span></button>
-        <button class="tab" role="tab" data-tab="web" data-web-tab hidden>Netz</button>
+        <button class="tab" role="tab" data-tab="web" data-web-tab hidden>Wood Wide Web</button>
         <button class="tab" role="tab" data-tab="autumn">Laubfall<span class="badge leaf" data-a-badge hidden>!</span></button>
-        <button class="tab" role="tab" data-tab="system">Menü</button>
-      </nav>
+        <div class="tab-pair">
+          <button class="tab" role="tab" data-tab="achievements">Erfolge</button>
+          <button class="gear" data-gear title="Einstellungen" aria-label="Einstellungen">
+      <svg viewBox="0 0 16 16" width="26" height="26" shape-rendering="crispEdges" aria-hidden="true">
+        <g fill="currentColor">
+          <path fill-rule="evenodd" d="M8 2.5a5.5 5.5 0 1 0 .001 0ZM8 5.8a2.2 2.2 0 1 1-.001 0Z"/>
+          <rect x="6.8" y="0.2" width="2.4" height="3"/>
+          <rect x="6.8" y="12.8" width="2.4" height="3"/>
+          <rect x="0.2" y="6.8" width="3" height="2.4"/>
+          <rect x="12.8" y="6.8" width="3" height="2.4"/>
+          <rect x="6.8" y="0.2" width="2.4" height="3" transform="rotate(45 8 8)"/>
+          <rect x="6.8" y="0.2" width="2.4" height="3" transform="rotate(135 8 8)"/>
+          <rect x="6.8" y="0.2" width="2.4" height="3" transform="rotate(225 8 8)"/>
+          <rect x="6.8" y="0.2" width="2.4" height="3" transform="rotate(315 8 8)"/>
+        </g>
+      </svg>
+    </button>
+        </div>
+    `
+    this.element.innerHTML = `
       <div class="scroll">
         <section data-pane="growth">
           <p class="hint">Klicke auf das Totholz, um Nährstoffe zu gewinnen.</p>
@@ -197,22 +226,14 @@ export class Panel {
           <h2 class="subhead">Humus-Verbesserungen</h2>
           <div class="list" data-humus-list></div>
         </section>
-        <section data-pane="system" hidden>
-          <h2 class="subhead">Erfolge</h2>
+        <section data-pane="achievements" hidden>
           <p class="hint small" data-ach-summary></p>
           <div class="ach-list" data-ach-list></div>
-          <h2 class="subhead">Spielstand</h2>
-          <footer>
-            <button data-act="save">Speichern</button>
-            <button data-act="export">Export</button>
-            <button data-act="import">Import</button>
-            <button data-act="reset" class="danger">Neustart</button>
-          </footer>
-          <p class="hint">Das Spiel speichert automatisch alle 10 Sekunden. Export kopiert den Spielstand als Text in die Zwischenablage.</p>
         </section>
       </div>`
 
-    const q = <T extends HTMLElement>(sel: string): T => this.element.querySelector<T>(sel)!
+    const q = <T extends HTMLElement>(sel: string): T =>
+      (this.element.querySelector<T>(sel) ?? this.hud.querySelector<T>(sel) ?? this.tabsBar.querySelector<T>(sel))!
     this.nutrients = q('[data-nutrients]')
     this.perSecond = q('[data-pps]')
     this.perClick = q('[data-ppc]')
@@ -316,7 +337,7 @@ export class Panel {
       webList.append(head, hint, list)
     }
 
-    this.tabButtons = [...this.element.querySelectorAll<HTMLButtonElement>('[data-tab]')]
+    this.tabButtons = [...this.tabsBar.querySelectorAll<HTMLButtonElement>('[data-tab]')]
     this.panes = [...this.element.querySelectorAll<HTMLElement>('[data-pane]')]
     for (const button of this.tabButtons) button.addEventListener('click', () => this.setTab(button.dataset.tab!))
     this.setTab(readStoredTab())
@@ -380,13 +401,19 @@ export class Panel {
       })
     }
 
-    const act = (name: string, fn: () => void): void => {
-      q<HTMLButtonElement>(`[data-act="${name}"]`).addEventListener('click', fn)
-    }
-    act('save', this.actions.save)
-    act('export', this.actions.exportSave)
-    act('import', this.actions.importSave)
-    act('reset', this.actions.reset)
+    // Zahnrad: Spielstand und Neustart, getrennt von den Erfolgen.
+    q<HTMLButtonElement>('[data-gear]').addEventListener('click', () => {
+      showMenu(
+        'Einstellungen',
+        [
+          { label: 'Speichern', run: () => this.actions.save() },
+          { label: 'Export', run: () => this.actions.exportSave() },
+          { label: 'Import', run: () => this.actions.importSave() },
+          { label: 'Neustart', danger: true, run: () => this.actions.reset() },
+        ],
+        'Das Spiel speichert automatisch alle 10 Sekunden. Export kopiert den Spielstand als Text in die Zwischenablage.',
+      )
+    })
   }
 
   update(state: GameState, tool: Tool): void {
@@ -484,11 +511,11 @@ export class Panel {
     const w = WEATHERS.find((x) => x.id === weather)!
     const fx = envEffects(state.env)
     const pct = (m: number): string => `+${Math.round((m - 1) * 100)} %`
-    const effects = ([['Produktion', fx.production], ['Klick', fx.click * fx.production], ['Trüffel', fx.truffle], ['Sporen', fx.spores]] as Array<[string, number]>)
+    const chips = ([['Prod', fx.production], ['Klick', fx.click * fx.production], ['Trüffel', fx.truffle], ['Sporen', fx.spores]] as Array<[string, number]>)
       .filter(([, m]) => m !== 1)
-      .map(([label, m]) => `${label} ${pct(m)}`)
-      .join(' · ')
-    this.envBox.innerHTML = `<span class="env-name">${SEASON_NAMES[season]} · ${w.name}</span><span class="env-fx">${effects}</span>`
+      .map(([label, m]) => `<span class="env-chip"><i></i>${label} ${pct(m)}</span>`)
+      .join('')
+    this.envBox.innerHTML = `<span class="env-name">${SEASON_NAMES[season]} · ${w.name}</span><span class="env-fx">${chips}</span>`
   }
 
   private updateAchievements(state: GameState): void {

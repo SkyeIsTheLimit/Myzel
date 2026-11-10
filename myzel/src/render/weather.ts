@@ -38,6 +38,8 @@ export class WeatherLayer {
   readonly container = new Container()
   /** Schneedecke auf dem Gras, nur im Winter. */
   private snowCover = new Container()
+  /** Gefallenes Laub auf dem Gras, nur im Herbst. */
+  private leafCarpet = new Container()
   private tint = sprite(AREA_W, GROUND + 4 - TOP, 0xffffff)
   private fog: Sprite[] = []
   private rain: Particle[] = []
@@ -70,6 +72,15 @@ export class WeatherLayer {
       this.snowCover.addChild(cap)
     }
     this.snowCover.visible = false
+    const leafColors = [0xe08a2f, 0xf2c14e, 0xb8561f, 0xd9602a, 0xc9a23a]
+    for (let x = -SIDE; x < WORLD_W + SIDE; x += 2) {
+      if (this.rnd() < 0.35) continue
+      const leaf = sprite(2 + Math.floor(this.rnd() * 2), 1, leafColors[Math.floor(this.rnd() * leafColors.length)])
+      leaf.position.set(x, SURFACE_Y + 2 + Math.floor(this.rnd() * 3))
+      this.leafCarpet.addChild(leaf)
+    }
+    this.leafCarpet.visible = false
+    this.container.addChild(this.leafCarpet)
     this.container.addChild(this.snowCover)
 
     for (let i = 0; i < 4; i++) {
@@ -120,6 +131,7 @@ export class WeatherLayer {
     this.tintBase = t?.alpha ?? 0
     this.tint.alpha = this.tintBase
     this.snowCover.visible = season === 'winter'
+    this.leafCarpet.visible = season === 'autumn'
   }
 
   update(dtMs: number, light: number): void {

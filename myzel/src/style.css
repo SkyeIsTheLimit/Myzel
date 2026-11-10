@@ -22,12 +22,23 @@ html, body {
 
 #app {
   display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+#main-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 #stage-wrap {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -256,8 +267,7 @@ footer .danger { box-shadow: inset 0 0 0 2px var(--danger); }
 .tabs {
   flex: none;
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(min-content, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 12px 14px 0 22px;
   background: var(--wood);
@@ -327,7 +337,7 @@ footer { margin-top: 4px; }
 .item.pig:hover:not(:disabled) { background: #5e3f2b; }
 
 /* --- Laubfall / Prestige --- */
-.tab { font-size: 10px; letter-spacing: 0; }
+.tab { font-size: 12px; letter-spacing: 0; }
 .badge.leaf { color: #2a1204; background: #f2a93c; box-shadow: 0 0 0 2px var(--wood-dark); }
 
 .autumn-card {
@@ -441,3 +451,149 @@ button.prestige:disabled { color: #8d7a58; background: #3a2616; box-shadow: inse
 .env[hidden] { display: none; }
 .env .env-name { color: #bfd8ff; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
 .env .env-fx { color: #9fb4c8; text-align: right; line-height: 1.4; }
+
+/* --- Neues Layout: Kopf links über dem Spiel, Tabs und Inhalt rechts, Zahnrad unten links --- */
+#hud {
+  flex: none;
+  padding: 10px 20px 12px;
+  background: var(--wood);
+  box-shadow: inset 0 -4px 0 var(--wood-dark), inset 0 4px 0 var(--wood-light);
+}
+#hud h1 {
+  margin: 0 0 8px;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 4px;
+  color: var(--glow);
+  text-shadow: 3px 3px 0 var(--wood-dark);
+}
+#hud .stats { flex-direction: row; align-items: stretch; gap: 0; padding: 8px 14px; }
+#hud .stats-main { flex: 1; gap: 24px; }
+#hud .spore-stat {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0 0 0 18px;
+  margin-left: 18px;
+  border-top: 0;
+  border-left: 2px solid #0f0903;
+  justify-content: center;
+}
+#hud .spore-stat .spore-rate { margin-left: 0; }
+#hud .env { margin-top: 8px; }
+.buffs-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  background: var(--wood-dark);
+  box-shadow: inset 0 0 0 2px #0f0903;
+}
+.buffs-label { white-space: nowrap; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #b8a47e; }
+.buffs-row .buffs { flex-direction: row; flex-wrap: wrap; margin: 0; padding: 4px 0; }
+.buffs-row .buffs:empty { display: flex; }
+.buffs-row .buffs:empty::before { content: 'keine aktiv'; font-size: 11px; color: #6b5a3e; white-space: nowrap; }
+
+#footer-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 4px 16px 10px;
+}
+.gear {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: #b8a47e;
+  background: var(--wood-dark);
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--wood-light);
+}
+.gear:hover { color: var(--glow); }
+.gear:active { transform: translateY(2px); }
+
+#panel { box-shadow: inset 4px 0 0 var(--wood-dark), inset 8px 0 0 var(--wood-light); }
+#panel .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 14px; }
+#panel .tab { font-size: 13px; }
+
+.dialog-title { margin: 0 0 12px; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: var(--glow); }
+.dialog-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.dialog-menu button {
+  padding: 12px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--paper);
+  background: var(--wood-dark);
+  border: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 2px var(--wood-light);
+}
+.dialog-menu button:hover { color: #fff6c8; }
+.dialog-menu button.danger { box-shadow: inset 0 0 0 2px var(--danger); }
+.dialog-hint { margin: 0 0 14px; font-size: 11px; line-height: 1.5; color: #8d7a58; }
+
+/* --- Durchgehender Balken oben: Infos links, Tabs rechts --- */
+#topbar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  background: var(--wood);
+  box-shadow: inset 0 4px 0 var(--wood-light), inset 0 -4px 0 var(--wood-dark);
+}
+#topbar #hud {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  box-shadow: none;
+  padding: 14px 20px 14px;
+}
+#tabs-slot {
+  flex: none;
+  width: 384px;
+  display: flex;
+  align-items: center;
+}
+#tabs-slot .tabs { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 18px 14px 18px; background: none; }
+#body { flex: 1; min-height: 0; display: flex; }
+#body #panel { height: auto; }
+
+.status-row { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.status-row .env { margin: 0; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 12px; min-width: 0; }
+.status-row .buffs-row { margin: 0; min-width: 0; }
+.env .env-fx { display: flex; flex-wrap: wrap; gap: 2px 10px; text-align: left; }
+.env-chip { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: #9fe8c8; }
+.env-chip i { width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-bottom: 5px solid #9fe8c8; }
+
+@media (max-width: 860px) {
+  #topbar { flex-direction: column; }
+  #tabs-slot { width: 100%; }
+  #tabs-slot .tabs { padding-top: 0; }
+  #body { flex-direction: column; }
+}
+
+/* Der linke Infobereich füllt den Balken, die Tabs sitzen rechts über dem Inhalt (gleiche Breite wie das Panel). */
+#hud-slot { flex: 1; min-width: 0; display: flex; }
+#hud-slot #hud { flex: 1; }
+#tabs-slot { box-shadow: inset 4px 0 0 var(--wood-dark), inset 8px 0 0 var(--wood-light); }
+@media (max-width: 860px) { #tabs-slot { box-shadow: none; } }
+
+/* Aufgeräumte Ränder: keine Naht im Balken, eine einfache dunkle Kante unter dem Balken und links vom Inhalt. */
+#tabs-slot { box-shadow: none; }
+@media (max-width: 860px) { #tabs-slot { box-shadow: none; } }
+#body #panel { box-shadow: inset 4px 0 0 var(--wood-dark); }
+#topbar { box-shadow: inset 0 4px 0 var(--wood-light), inset 0 -4px 0 var(--wood-dark); }
+
+/* Der Trennstrich zwischen Nährstoffen und Sporen läuft über die ganze Höhe des Kastens. */
+#hud .stats { padding: 0; }
+#hud .stats-main { padding: 8px 14px; }
+#hud .spore-stat { margin-left: 0; padding: 8px 16px 8px 16px; }
+
+/* Erfolge schmal, daneben das Zahnrad. */
+.tab-pair { display: flex; gap: 6px; min-width: 0; }
+.tab-pair .tab { flex: 1; min-width: 0; }
+.tab-pair .gear { flex: none; width: 40px; height: auto; align-self: stretch; }
+.tab-pair .gear svg { width: 22px; height: 22px; }

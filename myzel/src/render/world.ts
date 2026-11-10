@@ -47,6 +47,17 @@ const MIDNIGHT = 0.75
 const VEIL_FADE = 1.1
 const VEIL_HOLD = 0.5
 
+/** Größenfaktor der drei Spielbäume und des Totholzes gegenüber der Umgebung. */
+const GAME_TREE_SCALE = 1.14
+const LOG_SCALE = 1.35
+
+function multiplyColor(a: number, b: number): number {
+  const r = (((a >> 16) & 255) * ((b >> 16) & 255)) / 255
+  const g = (((a >> 8) & 255) * ((b >> 8) & 255)) / 255
+  const bl = ((a & 255) * (b & 255)) / 255
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl)
+}
+
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v))
 
 function lerpColor(a: number, b: number, t: number): number {
@@ -99,10 +110,12 @@ export class World {
   private nightOverlay = pixelSprite(COLORS.nightTint)
   private log: Sprite
   private logBounce = 0
+  private logIdle = 0
+  private logGlow = new Graphics()
   private mushrooms: Sprite[] = []
   private forest = new Forest(SIDE, SKY_EXTRA)
   /** Herbst-Gegenstücke der Bäume; werden je nach Fortschritt eingeblendet. */
-  private autumnTrees: Array<{ sprite: Sprite; start: number; green: Sprite; bare: Sprite; spring: Sprite; summer: Sprite }> = []
+  private autumnTrees: Array<{ sprite: Sprite; start: number; green: Sprite; bare: Sprite; spring: Sprite; summer: Sprite; game: boolean }> = []
   private seasonSet = false
   private pendingSeason: Season | null = null
   private targetSeason: Season | null = null
@@ -242,6 +255,7 @@ export class World {
       tree.x = TREE_X[0] + k * spacing
       tree.y = SURFACE_Y + 4
       this.stage.addChild(tree)
+      this.forest.addCrown(tree.x, SURFACE_Y - 48, 30)
 
       const autumn = new Sprite(autumnTextures[((k % 3) + 3) % 3])
       autumn.anchor.set(0.5, 1)
@@ -265,9 +279,18 @@ export class World {
       summer.position.copyFrom(tree.position)
       summer.visible = false
       this.stage.addChild(summer)
-      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55, green: tree, bare, spring, summer })
+      // Die drei Spielbäume sind etwas größer als die Deko-Bäume daneben.
+      const game = k >= 0 && k < TREE_X.length
+      if (game) for (const s of [tree, autumn, bare, spring, summer]) s.scale.set(GAME_TREE_SCALE)
+      this.autumnTrees.push({ sprite: autumn, start: autumnRandom() * 0.55, green: tree, bare, spring, summer, game })
     }
 
+    // Sanfter Schein hinter dem Totholz: zeigt, wo man klicken kann; wird stärker, wenn man länger nicht geklickt hat.
+    for (const [r, a] of [[26, 0.05], [19, 0.08], [13, 0.11]] as Array<[number, number]>) {
+      this.logGlow.circle(0, 0, r).fill({ color: 0xffe6a8, alpha: a })
+    }
+    this.logGlow.position.set(132, SURFACE_Y - 8)
+    this.stage.addChild(this.logGlow)
     this.log = new Sprite(buildLogTexture())
     this.log.anchor.set(0.5, 1)
     this.log.x = 132
@@ -276,6 +299,7 @@ export class World {
     this.log.cursor = 'pointer'
     this.log.on('pointerdown', (e: FederatedPointerEvent) => {
       this.logBounce = 1
+      this.logIdle = 0
       this.onLogClick(e.global.x, e.global.y)
     })
     this.log.on('pointerover', () => { this.log.tint = 0xfff0d0 })
@@ -514,7 +538,9 @@ export class World {
     const treeTint = lerpColor(0x6a7aa8, 0xffffff, light)
     this.rootSprite.tint = treeTint
     for (const t of this.autumnTrees) {
-      t.green.tint = t.sprite.tint = t.bare.tint = t.spring.tint = t.summer.tint = treeTint
+      // Deko-Bäume liegen leicht im Dunst, damit die Spielbäume kräftiger herausstehen.
+      const tint = t.game ? treeTint : multiplyColor(treeTint, 0xc8ced8)
+      t.green.tint = t.sprite.tint = t.bare.tint = t.spring.tint = t.summer.tint = tint
     }
     this.stars.forEach((star, i) => {
       star.alpha = Math.min(1, (1 - light) * (1 - light) * 1.15 * (0.7 + 0.3 * Math.sin(this.time * 2 + i)))
@@ -546,8 +572,11 @@ export class World {
 
     // Klick-Animation des Totholzes
     this.logBounce = Math.max(0, this.logBounce - dt * 6)
-    this.log.scale.y = 1 - 0.14 * this.logBounce
-    this.log.scale.x = 1 + 0.05 * this.logBounce
+    this.log.scale.y = LOG_SCALE * (1 - 0.14 * this.logBounce)
+    this.log.scale.x = LOG_SCALE * (1 + 0.05 * this.logBounce)
+    this.logIdle += dt
+    const idleBoost = Math.min(0.45, Math.max(0, (this.logIdle - 12) / 20) * 0.45)
+    this.logGlow.alpha = (0.55 + 0.25 * Math.sin(this.time * 2.2) + idleBoost) * (0.7 + 0.8 * night)
 
     // Nährstofffluss durch das Geflecht
     for (const f of this.flows) {

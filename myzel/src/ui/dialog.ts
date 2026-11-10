@@ -91,3 +91,69 @@ export function askText(message: string, okLabel = 'OK'): Promise<string | null>
 export async function showText(message: string, text: string): Promise<void> {
   await open({ message, okLabel: 'Schließen', input: { value: text, readOnly: true } })
 }
+
+export interface MenuItem {
+  label: string
+  danger?: boolean
+  run: () => void
+}
+
+/** Kleines Menü als Fenster über dem Spiel (zum Beispiel die Einstellungen hinter dem Zahnrad). */
+export function showMenu(title: string, items: MenuItem[], hint: string): void {
+  const backdrop = document.createElement('div')
+  backdrop.className = 'dialog-backdrop'
+  const box = document.createElement('div')
+  box.className = 'dialog'
+  box.setAttribute('role', 'dialog')
+  box.setAttribute('aria-modal', 'true')
+
+  const head = document.createElement('h2')
+  head.className = 'dialog-title'
+  head.textContent = title
+  box.appendChild(head)
+
+  const list = document.createElement('div')
+  list.className = 'dialog-menu'
+  const close = (): void => {
+    window.removeEventListener('keydown', onKey, true)
+    backdrop.remove()
+  }
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      close()
+    }
+  }
+  for (const item of items) {
+    const button = document.createElement('button')
+    button.textContent = item.label
+    if (item.danger) button.classList.add('danger')
+    button.addEventListener('click', () => {
+      close()
+      item.run()
+    })
+    list.appendChild(button)
+  }
+  box.appendChild(list)
+
+  const note = document.createElement('p')
+  note.className = 'dialog-hint'
+  note.textContent = hint
+  box.appendChild(note)
+
+  const buttons = document.createElement('div')
+  buttons.className = 'dialog-buttons'
+  const done = document.createElement('button')
+  done.textContent = 'Schließen'
+  done.addEventListener('click', close)
+  buttons.appendChild(done)
+  box.appendChild(buttons)
+
+  backdrop.appendChild(box)
+  backdrop.addEventListener('pointerdown', (e) => {
+    if (e.target === backdrop) close()
+  })
+  window.addEventListener('keydown', onKey, true)
+  document.body.appendChild(backdrop)
+  done.focus()
+}

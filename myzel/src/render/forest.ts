@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js'
-import { SURFACE_Y, WORLD_W, buildBareCanopyTexture, buildCanopyTexture, buildHillTexture, buildPineTexture, buildPlantTextures, rng } from './sprites.ts'
+import { SURFACE_Y, WORLD_W, buildBareCanopyTexture, buildCanopyTexture, buildHillTexture, buildMushroomTexture, buildPineTexture, buildPlantTextures, rng } from './sprites.ts'
 import type { PinePalette, TrunkStyle } from './sprites.ts'
 import type { Season } from '../game/weather.ts'
 
@@ -112,6 +112,11 @@ export class Forest {
   private seasonal: SeasonalTree[] = []
   /** Zusätzliche Blumen auf dem Gras, nur im Frühling sichtbar. */
   private springFlowers = new Container()
+  /** Pilze im Gras, nur im Herbst sichtbar. */
+  private autumnMushrooms = new Container()
+  private leafBoost = 1
+  /** Baumkronen, aus denen im Herbst Laub fällt: Mitte und Breite der Krone. */
+  private crowns: Array<{ x: number; y: number; w: number }> = []
   private rays: Array<{ g: Graphics; phase: number }> = []
   private flies: Array<{ s: Sprite; x: number; y: number; phase: number; speed: number }> = []
   private random = rng(909)
@@ -267,6 +272,24 @@ export class Forest {
       this.springFlowers.addChild(flower)
     }
 
+    // Herbstpilze: Rote und braune Pilze in kleinen Gruppen.
+    this.autumnMushrooms.visible = false
+    frontLayer.addChild(this.autumnMushrooms)
+    const mushroom = buildMushroomTexture()
+    for (let mx = left; mx < left + span; mx += 14 + this.random() * 30) {
+      if (mx > 108 && mx < 156) continue
+      const group = 1 + Math.floor(this.random() * 3)
+      for (let k = 0; k < group; k++) {
+        const m = new Sprite(mushroom)
+        m.anchor.set(0.5, 1)
+        const size = 0.4 + this.random() * 0.35
+        m.scale.set(size * (this.random() < 0.5 ? -1 : 1), size)
+        m.tint = [0xffffff, 0xffd8a8, 0xe8c090, 0xf0a090][Math.floor(this.random() * 4)]
+        m.position.set(Math.round(mx + k * 5 + this.random() * 3), SURFACE_Y + 4 + Math.floor(this.random() * 3))
+        this.autumnMushrooms.addChild(m)
+      }
+    }
+
     this.front.addChild(this.leafLayer)
 
     // Glühwürmchen
@@ -293,6 +316,8 @@ export class Forest {
       const tex = season === 'autumn' ? t.autumn : season === 'winter' ? t.winter : season === 'spring' ? t.spring : season === 'summer' ? t.summer : undefined
       t.sprite.texture = tex ?? t.base
     }
+    this.autumnMushrooms.visible = season === 'autumn'
+    this.leafBoost = season === 'autumn' ? 2.2 : 1
     this.springFlowers.visible = season === 'spring' || season === 'summer'
     // Im Sommer blühen die Blumen gelb und weiß, im Frühling bunt.
     this.springFlowers.tint = season === 'summer' ? 0xfff0a8 : 0xffffff
@@ -309,13 +334,25 @@ export class Forest {
     this.burstTime = 5
   }
 
+  /** Meldet eine Baumkrone, aus der Laub fallen kann (Mittelpunkt und Breite in Weltpixeln). */
+  addCrown(x: number, y: number, w: number): void {
+    this.crowns.push({ x, y, w })
+  }
+
   private spawnLeaf(burst: boolean): void {
     if (this.leaves.length >= 240) return
     const s = new Sprite(Texture.WHITE)
     s.tint = [0xe08a2f, 0xf2c14e, 0xb8561f, 0xd9602a, 0xc9a23a][Math.floor(this.random() * 5)]
     s.width = this.random() < 0.5 ? 3 : 2
     s.height = 2
-    s.position.set(-60 + this.random() * (WORLD_W + 120), (burst ? -120 : -40) + this.random() * (burst ? 80 : 50))
+    if (burst || this.crowns.length === 0) {
+      // Der Blätterregen beim Laubfall kommt von oben über die ganze Breite.
+      s.position.set(-60 + this.random() * (WORLD_W + 120), (burst ? -120 : -40) + this.random() * (burst ? 80 : 50))
+    } else {
+      // Sonst löst sich das Laub aus den Kronen.
+      const c = this.crowns[Math.floor(this.random() * this.crowns.length)]
+      s.position.set(c.x + (this.random() - 0.5) * c.w, c.y + (this.random() - 0.3) * 10)
+    }
     this.leafLayer.addChild(s)
     this.leaves.push({
       s,
@@ -330,7 +367,7 @@ export class Forest {
   private updateLeaves(dt: number): void {
     const ambient = this.autumn > 0.3 ? Math.pow((this.autumn - 0.3) / 0.7, 2) * 3 : 0
     this.burstTime = Math.max(0, this.burstTime - dt)
-    this.leafAccum += dt * (ambient + (this.burstTime > 0 ? 45 : 0))
+    this.leafAccum += dt * (ambient * this.leafBoost + (this.burstTime > 0 ? 45 : 0))
     while (this.leafAccum >= 1) {
       this.leafAccum -= 1
       this.spawnLeaf(this.burstTime > 0)
@@ -394,6 +431,11 @@ export class Forest {
       // Der Fuß liegt unter der Grasreihe, die ihn verdeckt: keine Lücke zwischen Stamm und Boden.
       sprite.position.set(Math.round(x), SURFACE_Y + 5 + Math.floor(this.random() * 4))
       if (this.random() < 0.5) sprite.scale.x = -1
+      // Laubbäume (Kinder mit Frühlingsbild) verlieren im Herbst Blätter aus der Krone.
+      if (kind.spring) {
+        const tex = kind.textures[index]
+        this.addCrown(sprite.x, sprite.y - tex.height * 0.68, tex.width * 0.6)
+      }
       const shade = 218 + Math.floor(this.random() * 38)
       sprite.tint = (shade << 16) | (shade << 8) | shade
       layer.addChild(sprite)

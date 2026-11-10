@@ -56,12 +56,20 @@ async function main(): Promise<void> {
 
   const root = document.querySelector<HTMLDivElement>('#app')!
   root.innerHTML = `
-    <div id="stage-wrap">
-      <div id="stage">
-        <div id="popups"></div>
-        <div id="tooltip" hidden></div>
-        <div id="toast" hidden></div>
-      </div>
+    <div id="topbar">
+      <div id="hud-slot"></div>
+      <div id="tabs-slot"></div>
+    </div>
+    <div id="body">
+      <div id="main-col">
+        <div id="stage-wrap">
+          <div id="stage">
+            <div id="popups"></div>
+            <div id="tooltip" hidden></div>
+            <div id="toast" hidden></div>
+          </div>
+        </div>
+        </div>
     </div>`
   const stageEl = root.querySelector<HTMLDivElement>('#stage')!
   const wrapEl = root.querySelector<HTMLDivElement>('#stage-wrap')!
@@ -88,9 +96,9 @@ async function main(): Promise<void> {
 
   let scale = 1
   const resize = (): void => {
-    const panelWidth = window.innerWidth > 860 ? 384 : 0
-    const availW = window.innerWidth - panelWidth - 40
-    const availH = (window.innerWidth > 860 ? window.innerHeight : window.innerHeight * 0.55) - 40
+    // Das Spielfeld bekommt, was die linke Spalte neben Kopf und Fußleiste übrig lässt.
+    const availW = wrapEl.clientWidth - 24
+    const availH = wrapEl.clientHeight - 24
     // Ganzzahliger Pixel-Maßstab, so groß, dass das Spielfeld (384×216) noch komplett passt.
     scale = Math.max(1, Math.floor(Math.min(availW / WORLD_W, availH / WORLD_H)))
     // Der Canvas füllt die gesamte Fläche; das Spielfeld sitzt zentriert darin.
@@ -289,7 +297,10 @@ async function main(): Promise<void> {
       refreshAll()
     },
   })
-  root.appendChild(panel.element)
+  root.querySelector('#hud-slot')!.appendChild(panel.hud)
+  root.querySelector('#tabs-slot')!.appendChild(panel.tabsBar)
+  root.querySelector('#body')!.appendChild(panel.element)
+  resize()
 
   // Schon erreichte Erfolge (etwa nach einem Update) still verbuchen, ohne Meldung.
   checkAchievements(state)
